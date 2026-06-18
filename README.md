@@ -4,7 +4,7 @@
 
 Parametric Markdown is an early-stage, text-first design language and browser renderer for creating technical designs from readable Markdown-like source. The long-term goal is one deterministic language that humans and LLMs can write, review, version, validate, and exchange with established engineering tools.
 
-The project currently supports **electronic schematics**, **electrical single-line diagrams**, and an initial **physical panel-wiring** domain. PCB design and parametric 3D CAD remain planned work.
+The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, and **idealized educational waveforms**. PCB design and parametric 3D CAD remain planned work.
 
 ## Why Parametric Markdown?
 
@@ -30,6 +30,7 @@ Parametric Markdown is a prototype. The current browser application includes:
 - Electrical single-line diagrams with sources, protection, buses, contactors, relays, loads, and branches.
 - Separate power feeders, relay control commands, and equipment-status feedback.
 - Physical panel-wiring blocks with terminal IDs, wire numbers, colors, sizes, automatic routing, and sticker-style SVG output.
+- Educational waveform sheets with ideal sine, PWM, triangle, sawtooth, pulse, step, DC, and exponential traces.
 - SVG and Markdown downloads.
 
 Not implemented yet:
@@ -38,6 +39,7 @@ Not implemented yet:
 - PCB footprints, placement, routing, layers, zones, and design rules.
 - Parametric 2D sketches or 3D solid modeling.
 - FreeCAD, STEP, or other mechanical CAD export.
+- SPICE simulation or circuit-derived waveform calculation.
 
 ## Quick Start
 
@@ -48,7 +50,7 @@ cd D:\Rakesh_patil\schematic_markdown
 python -m http.server 4173
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example demonstrates electronic sheets, an electrical distribution line diagram, and a DOL starter panel-wiring sticker.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example also demonstrates a DOL starter wiring sticker and an educational waveform sheet.
 
 ## Language Examples
 
@@ -118,6 +120,23 @@ QF1.2 --> KM1.L1 wire=111 color=BN size=2.5mm2
 
 Unlike a `line` block, a `wiring` block represents physical conductors between real device terminals. The renderer validates endpoint references and wire metadata, then produces a numbered sticker-style SVG.
 
+### Educational Waveforms
+
+````markdown
+```waveform
+title "Basic signal shapes"
+time start=0 end=10 unit=ms divisions=10
+
+AC: sine label="AC input" amplitude=1 cycles=2 unit=V color=#2563eb
+PWM: square label="PWM, 35% duty" low=0 high=5 duty=35 cycles=5 unit=V color=#dc2626
+VC: exponential label="Capacitor charging" from=0 to=5 tau=2 unit=V color=#16a34a
+
+marker SWITCH at=2 label="switch closes"
+```
+````
+
+Waveform blocks are deliberately explanatory. They align idealized signal shapes and events for teaching, but do not simulate the surrounding circuit.
+
 ## Roadmap
 
 The roadmap is directional. Future syntax will be designed and validated before it is documented as part of the language.
@@ -126,6 +145,7 @@ The roadmap is directional. Future syntax will be designed and validated before 
 
 - [x] Markdown fenced blocks for electronic schematics.
 - [x] A distinct electrical single-line domain.
+- [x] Idealized educational waveform sheets.
 - [x] Browser rendering and diagnostics.
 - [x] SVG and source downloads.
 - [ ] Extract a reusable parser, typed intermediate representation, and renderer API from the browser UI.
@@ -198,6 +218,7 @@ Typed design model
       +--> SVG / browser preview
       +--> KiCad schematic and PCB
       +--> Wiring documents and schedules
+      +--> Educational waveform SVG
       +--> FreeCAD / STEP and 3D preview
 ```
 

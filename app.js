@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "schematic-markdown-source-v8";
+  const STORAGE_KEY = "schematic-markdown-source-v9";
   const STANDALONE_SVG_STYLE = `
     text { font-family: Inter, Arial, sans-serif; }
     .symbol-label { font: 600 12px/1.2 Inter, Arial, sans-serif; fill: #172033; }
@@ -28,6 +28,14 @@
     .wiring-terminal-label { font: 800 9px/1 Inter, Arial, sans-serif; fill: #172033; }
     .wiring-wire-label { font: 800 9px/1 Inter, Arial, sans-serif; fill: #172033; }
     .wiring-title-small { font: 700 9px/1 Inter, Arial, sans-serif; fill: #475569; }
+    .waveform-title { font: 800 17px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .waveform-subtitle { font: 600 9.5px/1 Inter, Arial, sans-serif; fill: #64748b; }
+    .waveform-ref { font: 800 11px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .waveform-label { font: 600 9.5px/1 Inter, Arial, sans-serif; fill: #475569; }
+    .waveform-type { font: 800 8px/1 Inter, Arial, sans-serif; fill: #64748b; letter-spacing: 0; }
+    .waveform-value { font: 700 8px/1 Inter, Arial, sans-serif; fill: #64748b; }
+    .waveform-time { font: 700 8.5px/1 Inter, Arial, sans-serif; fill: #475569; }
+    .waveform-marker { font: 800 8.5px/1 Inter, Arial, sans-serif; fill: #334155; }
   `;
   const CATALOG = window.KICAD_SYMBOL_CATALOG || { symbols: {}, libraries: {}, loadedLibraries: {}, symbolCount: 0, generatedAt: null };
   const knownSymbolCache = new Map();
@@ -413,6 +421,23 @@ S1.2 --> KM1.A1 wire=404 color=RD size=0.75mm2
 KM1.A2 --> X1.6 wire=405 color=BU size=0.75mm2
 X1.5 --> KM1.13 wire=406 color=RD size=0.75mm2
 KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
+\`\`\`
+
+## Educational waveform sheet
+
+\`\`\`waveform
+title "Idealized signals for teaching"
+time start=0 end=10 unit=ms divisions=10
+
+AC: sine label="AC sine wave" amplitude=1 cycles=2 unit=V color=#2563eb
+PWM: square label="PWM, 35% duty" low=0 high=5 duty=35 cycles=5 unit=V color=#dc2626
+TRI: triangle label="Triangle wave" min=-1 max=1 cycles=2 unit=V color=#7c3aed
+RAMP: sawtooth label="Sawtooth ramp" min=0 max=1 cycles=3 unit=V color=#0f766e
+TRIG: pulse label="Single trigger pulse" low=0 high=5 at=2 width=2 unit=V color=#d97706
+VC: exponential label="Capacitor charging" from=0 to=5 tau=2 unit=V color=#16a34a
+
+marker SWITCH at=2 label="trigger"
+marker SAMPLE at=7 label="sample"
 \`\`\``;
 
   function escapeHtml(value) {
@@ -590,7 +615,7 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
 
   function extractDiagramBlocks(markdown) {
     const blocks = [];
-    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring)\s*$/gim;
+    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring|waveform|waveforms)\s*$/gim;
     let match;
     while ((match = fenceRe.exec(markdown)) !== null) {
       const startIndex = match.index + match[0].length;
@@ -1263,6 +1288,169 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
     }
     for (const device of diagram.devices) {
       if (!connected.has(device.ref)) diagnostics.push(warning(device.line, `Wiring device "${device.ref}" is not connected.`));
+    }
+    return diagnostics;
+  }
+
+  const WAVEFORM_TYPE_ALIASES = {
+    pwm: "square",
+    clock: "square",
+    ramp: "sawtooth",
+    saw: "sawtooth",
+    constant: "dc",
+    exp: "exponential",
+    charge: "exponential"
+  };
+  const WAVEFORM_TYPES = new Set([
+    "sine", "square", "triangle", "sawtooth", "pulse", "dc", "step", "exponential"
+  ]);
+  const DEFAULT_WAVEFORM_COLORS = [
+    "#2563eb", "#dc2626", "#7c3aed", "#0f766e", "#d97706", "#16a34a", "#db2777", "#475569"
+  ];
+
+  function normalizeWaveformType(value) {
+    const normalized = String(value || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
+    return WAVEFORM_TYPE_ALIASES[normalized] || normalized;
+  }
+
+  function waveformNumber(attrs, key, fallback) {
+    const value = attrs?.[key];
+    if (value === undefined || value === null || value === "") return fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  }
+
+  function parseWaveformDiagram(source, options = {}) {
+    const startLine = options.startLine || 1;
+    const diagram = {
+      kind: "waveform",
+      title: "Educational waveforms",
+      time: { start: 0, end: 10, unit: "ms", divisions: 10, line: startLine },
+      signals: [],
+      markers: [],
+      diagnostics: []
+    };
+    const seenSignals = new Set();
+    const seenMarkers = new Set();
+    let hasTime = false;
+
+    source.split(/\r\n|\r|\n/).forEach((rawLine, index) => {
+      const lineNumber = startLine + index;
+      const line = stripComment(rawLine);
+      if (!line) return;
+
+      const titleMatch = line.match(/^title\s+(.+)$/i);
+      if (titleMatch) {
+        diagram.title = unquoteValue(titleMatch[1]);
+        return;
+      }
+
+      const timeMatch = line.match(/^time\b(.*)$/i);
+      if (timeMatch) {
+        if (hasTime) {
+          diagram.diagnostics.push(error(lineNumber, "Only one time declaration is allowed per waveform block."));
+          return;
+        }
+        hasTime = true;
+        const attrs = parseAttributes(timeMatch[1]);
+        diagram.time = {
+          start: waveformNumber(attrs, "start", 0),
+          end: waveformNumber(attrs, "end", 10),
+          unit: attrs.unit || "ms",
+          divisions: waveformNumber(attrs, "divisions", 10),
+          line: lineNumber
+        };
+        return;
+      }
+
+      const markerMatch = line.match(/^marker\s+([A-Za-z_][\w-]*)\b(.*)$/i);
+      if (markerMatch) {
+        const id = markerMatch[1];
+        const attrs = parseAttributes(markerMatch[2]);
+        if (seenMarkers.has(id.toLowerCase())) {
+          diagram.diagnostics.push(error(lineNumber, `Duplicate waveform marker "${id}".`));
+          return;
+        }
+        seenMarkers.add(id.toLowerCase());
+        diagram.markers.push({ id, attrs, line: lineNumber, index: diagram.markers.length });
+        return;
+      }
+
+      const signalMatch = line.match(/^([A-Za-z_][\w-]*)\s*:\s*([^\s]+)(.*)$/);
+      if (signalMatch) {
+        const ref = signalMatch[1];
+        const type = normalizeWaveformType(signalMatch[2]);
+        const attrs = parseAttributes(signalMatch[3]);
+        if (seenSignals.has(ref.toLowerCase())) {
+          diagram.diagnostics.push(error(lineNumber, `Duplicate waveform signal "${ref}".`));
+          return;
+        }
+        seenSignals.add(ref.toLowerCase());
+        diagram.signals.push({ ref, type, rawType: signalMatch[2], attrs, line: lineNumber, index: diagram.signals.length });
+        return;
+      }
+
+      diagram.diagnostics.push(error(lineNumber, `Could not parse waveform statement: ${line}`));
+    });
+
+    validateWaveformDiagram(diagram);
+    return diagram;
+  }
+
+  function validateWaveformDiagram(diagram) {
+    const diagnostics = diagram.diagnostics;
+    const time = diagram.time;
+    if (!Number.isFinite(time.start) || !Number.isFinite(time.end) || time.end <= time.start) {
+      diagnostics.push(error(time.line, "Waveform time end must be greater than start."));
+    }
+    if (!Number.isInteger(time.divisions) || time.divisions < 2 || time.divisions > 20) {
+      diagnostics.push(error(time.line, "Waveform time divisions must be an integer from 2 to 20."));
+    }
+    if (!diagram.signals.length) diagnostics.push(warning(time.line, "Waveform block has no signals."));
+
+    const numericAttributes = ["amplitude", "offset", "phase", "cycles", "low", "high", "min", "max", "value", "at", "width", "from", "to", "tau", "delay"];
+    for (const signal of diagram.signals) {
+      if (!WAVEFORM_TYPES.has(signal.type)) {
+        diagnostics.push(error(signal.line, `Unknown waveform type "${signal.rawType}".`));
+        continue;
+      }
+      for (const key of numericAttributes) {
+        if (signal.attrs[key] !== undefined && !Number.isFinite(Number(signal.attrs[key]))) {
+          diagnostics.push(error(signal.line, `Signal "${signal.ref}" has invalid ${key} value "${signal.attrs[key]}".`));
+        }
+      }
+      if (signal.attrs.color && !isColor(signal.attrs.color)) {
+        diagnostics.push(error(signal.line, `Signal "${signal.ref}" has invalid color "${signal.attrs.color}".`));
+      }
+      const cycles = waveformNumber(signal.attrs, "cycles", 1);
+      if (cycles <= 0) diagnostics.push(error(signal.line, `Signal "${signal.ref}" cycles must be positive.`));
+      const duty = waveformNumber(signal.attrs, "duty", 50);
+      if (["square", "pulse"].includes(signal.type) && (duty <= 0 || duty >= 100)) {
+        diagnostics.push(error(signal.line, `Signal "${signal.ref}" duty must be between 0 and 100.`));
+      }
+      if (signal.type === "pulse" && signal.attrs.width !== undefined && waveformNumber(signal.attrs, "width", 0) <= 0) {
+        diagnostics.push(error(signal.line, `Pulse "${signal.ref}" width must be positive.`));
+      }
+      if (signal.type === "exponential" && waveformNumber(signal.attrs, "tau", 0) <= 0) {
+        diagnostics.push(error(signal.line, `Exponential signal "${signal.ref}" requires a positive tau.`));
+      }
+      const low = waveformNumber(signal.attrs, "low", waveformNumber(signal.attrs, "min", 0));
+      const high = waveformNumber(signal.attrs, "high", waveformNumber(signal.attrs, "max", 1));
+      if (["square", "triangle", "sawtooth", "pulse", "step"].includes(signal.type) && high === low) {
+        diagnostics.push(warning(signal.line, `Signal "${signal.ref}" has equal high and low values.`));
+      }
+    }
+
+    for (const marker of diagram.markers) {
+      const at = Number(marker.attrs.at);
+      if (!Number.isFinite(at)) {
+        diagnostics.push(error(marker.line, `Marker "${marker.id}" requires a numeric at value.`));
+      } else if (at < time.start || at > time.end) {
+        diagnostics.push(warning(marker.line, `Marker "${marker.id}" is outside the displayed time range.`));
+      }
+      if (marker.attrs.color && !isColor(marker.attrs.color)) {
+        diagnostics.push(error(marker.line, `Marker "${marker.id}" has invalid color "${marker.attrs.color}".`));
+      }
     }
     return diagnostics;
   }
@@ -4116,6 +4304,187 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
     </svg>`;
   }
 
+  function waveformSignalValue(signal, normalizedTime, time) {
+    const attrs = signal.attrs;
+    const cycles = waveformNumber(attrs, "cycles", 1);
+    const phase = waveformNumber(attrs, "phase", 0) / 360;
+    const cyclePosition = ((normalizedTime * cycles + phase) % 1 + 1) % 1;
+    const low = waveformNumber(attrs, "low", waveformNumber(attrs, "min", 0));
+    const high = waveformNumber(attrs, "high", waveformNumber(attrs, "max", 1));
+    const actualTime = time.start + normalizedTime * (time.end - time.start);
+
+    if (signal.type === "sine") {
+      const amplitude = waveformNumber(attrs, "amplitude", 1);
+      const offset = waveformNumber(attrs, "offset", 0);
+      return offset + amplitude * Math.sin(2 * Math.PI * (normalizedTime * cycles + phase));
+    }
+    if (signal.type === "square") {
+      return cyclePosition < waveformNumber(attrs, "duty", 50) / 100 ? high : low;
+    }
+    if (signal.type === "triangle") {
+      const triangle = 1 - Math.abs(2 * cyclePosition - 1);
+      return low + (high - low) * triangle;
+    }
+    if (signal.type === "sawtooth") return low + (high - low) * cyclePosition;
+    if (signal.type === "pulse") {
+      if (attrs.at !== undefined || attrs.width !== undefined) {
+        const at = waveformNumber(attrs, "at", time.start + (time.end - time.start) * 0.25);
+        const width = waveformNumber(attrs, "width", (time.end - time.start) * 0.2);
+        return actualTime >= at && actualTime < at + width ? high : low;
+      }
+      return cyclePosition < waveformNumber(attrs, "duty", 25) / 100 ? high : low;
+    }
+    if (signal.type === "dc") return waveformNumber(attrs, "value", waveformNumber(attrs, "level", 1));
+    if (signal.type === "step") {
+      const at = waveformNumber(attrs, "at", time.start + (time.end - time.start) / 2);
+      return actualTime < at ? low : high;
+    }
+    if (signal.type === "exponential") {
+      const from = waveformNumber(attrs, "from", 0);
+      const to = waveformNumber(attrs, "to", 1);
+      const tau = Math.max(1e-9, waveformNumber(attrs, "tau", (time.end - time.start) / 5));
+      const delay = waveformNumber(attrs, "delay", 0);
+      const elapsed = Math.max(0, actualTime - time.start - delay);
+      return from + (to - from) * (1 - Math.exp(-elapsed / tau));
+    }
+    return 0;
+  }
+
+  function waveformSignalBounds(signal) {
+    const attrs = signal.attrs;
+    if (signal.type === "sine") {
+      const amplitude = Math.abs(waveformNumber(attrs, "amplitude", 1));
+      const offset = waveformNumber(attrs, "offset", 0);
+      return { min: offset - amplitude, max: offset + amplitude };
+    }
+    if (["square", "triangle", "sawtooth", "pulse", "step"].includes(signal.type)) {
+      const first = waveformNumber(attrs, "low", waveformNumber(attrs, "min", 0));
+      const second = waveformNumber(attrs, "high", waveformNumber(attrs, "max", 1));
+      return { min: Math.min(first, second), max: Math.max(first, second) };
+    }
+    if (signal.type === "exponential") {
+      const first = waveformNumber(attrs, "from", 0);
+      const second = waveformNumber(attrs, "to", 1);
+      return { min: Math.min(first, second), max: Math.max(first, second) };
+    }
+    const value = waveformNumber(attrs, "value", waveformNumber(attrs, "level", 1));
+    return { min: value, max: value };
+  }
+
+  function waveformFormatValue(value) {
+    if (!Number.isFinite(value)) return "-";
+    if (Math.abs(value) >= 100 || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+    return String(Math.round(value * 1000) / 1000);
+  }
+
+  function waveformTrace(signal, diagram, geometry) {
+    const bounds = waveformSignalBounds(signal);
+    const flat = Math.abs(bounds.max - bounds.min) < 1e-9;
+    const renderMin = flat ? bounds.min - 1 : bounds.min;
+    const renderMax = flat ? bounds.max + 1 : bounds.max;
+    const samples = 360;
+    const points = [];
+    const discontinuous = ["square", "sawtooth", "pulse", "step"].includes(signal.type);
+    let previous = null;
+    for (let index = 0; index <= samples; index += 1) {
+      const normalizedTime = index / samples;
+      const value = waveformSignalValue(signal, normalizedTime, diagram.time);
+      const x = geometry.left + normalizedTime * geometry.width;
+      const y = geometry.top + 15 + (renderMax - value) / (renderMax - renderMin) * (geometry.height - 30);
+      if (discontinuous && previous && Math.abs(value - previous.value) > Math.abs(renderMax - renderMin) * 0.4) {
+        points.push({ x, y: previous.y, value: previous.value });
+      }
+      points.push({ x, y, value });
+      previous = { x, y, value };
+    }
+    const path = points.map((point, index) => `${index ? "L" : "M"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+    return { path, bounds, flat };
+  }
+
+  function renderWaveformSignal(signal, diagram, geometry) {
+    const trace = waveformTrace(signal, diagram, geometry);
+    const color = signal.attrs.color || DEFAULT_WAVEFORM_COLORS[signal.index % DEFAULT_WAVEFORM_COLORS.length];
+    const label = clippedLineText(signal.attrs.label || signal.ref, 28);
+    const unit = signal.attrs.unit || "";
+    const topValue = `${waveformFormatValue(trace.bounds.max)}${unit}`;
+    const bottomValue = trace.flat ? "" : `${waveformFormatValue(trace.bounds.min)}${unit}`;
+    const middleY = geometry.top + geometry.height / 2;
+    return `<g class="waveform-signal" data-signal="${escapeHtml(signal.ref)}" data-type="${escapeHtml(signal.type)}">
+      <line x1="${geometry.left.toFixed(2)}" y1="${(geometry.top + 15).toFixed(2)}" x2="${(geometry.left + geometry.width).toFixed(2)}" y2="${(geometry.top + 15).toFixed(2)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 4"></line>
+      <line x1="${geometry.left.toFixed(2)}" y1="${middleY.toFixed(2)}" x2="${(geometry.left + geometry.width).toFixed(2)}" y2="${middleY.toFixed(2)}" stroke="#cbd5e1" stroke-width="1"></line>
+      <line x1="${geometry.left.toFixed(2)}" y1="${(geometry.top + geometry.height - 15).toFixed(2)}" x2="${(geometry.left + geometry.width).toFixed(2)}" y2="${(geometry.top + geometry.height - 15).toFixed(2)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="3 4"></line>
+      <text class="waveform-ref" x="30" y="${(geometry.top + 27).toFixed(2)}">${escapeHtml(signal.ref)}</text>
+      <text class="waveform-label" x="30" y="${(geometry.top + 46).toFixed(2)}">${escapeHtml(label)}</text>
+      <text class="waveform-type" x="30" y="${(geometry.top + 68).toFixed(2)}">${escapeHtml(signal.type.toUpperCase())}</text>
+      <text class="waveform-value" x="${(geometry.left - 10).toFixed(2)}" y="${(geometry.top + 18).toFixed(2)}" text-anchor="end">${escapeHtml(topValue)}</text>
+      ${bottomValue ? `<text class="waveform-value" x="${(geometry.left - 10).toFixed(2)}" y="${(geometry.top + geometry.height - 12).toFixed(2)}" text-anchor="end">${escapeHtml(bottomValue)}</text>` : ""}
+      <path d="${trace.path}" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path class="waveform-trace" d="${trace.path}" fill="none" stroke="${escapeHtml(color)}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    </g>`;
+  }
+
+  function renderWaveformDiagramSvg(diagram, options = {}) {
+    const width = 1100;
+    const plotLeft = 180;
+    const plotRight = 1040;
+    const plotWidth = plotRight - plotLeft;
+    const laneHeight = 92;
+    const laneGap = 8;
+    const plotTop = 78;
+    const laneCount = Math.max(1, diagram.signals.length);
+    const plotBottom = plotTop + laneCount * laneHeight + Math.max(0, laneCount - 1) * laneGap;
+    const height = plotBottom + 62;
+    const time = diagram.time;
+    const duration = Math.max(1e-9, time.end - time.start);
+    const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    const divisions = Math.max(2, Math.min(20, Number.isInteger(time.divisions) ? time.divisions : 10));
+    const grid = Array.from({ length: divisions + 1 }, (_, index) => {
+      const fraction = index / divisions;
+      const x = plotLeft + fraction * plotWidth;
+      const value = time.start + fraction * duration;
+      return `<line x1="${x.toFixed(2)}" y1="${plotTop}" x2="${x.toFixed(2)}" y2="${plotBottom}" stroke="#e2e8f0" stroke-width="1"></line>
+        <text class="waveform-time" x="${x.toFixed(2)}" y="${(plotBottom + 26).toFixed(2)}" text-anchor="middle">${escapeHtml(waveformFormatValue(value))}</text>`;
+    }).join("\n");
+    const bands = diagram.signals.map((signal, index) => {
+      const top = plotTop + index * (laneHeight + laneGap);
+      return `<rect x="18" y="${top.toFixed(2)}" width="1064" height="${laneHeight}" fill="${index % 2 ? "#ffffff" : "#f8fafc"}"></rect>`;
+    }).join("\n");
+    const signals = diagram.signals.map((signal, index) => renderWaveformSignal(signal, diagram, {
+      left: plotLeft,
+      width: plotWidth,
+      top: plotTop + index * (laneHeight + laneGap),
+      height: laneHeight
+    })).join("\n");
+    const markers = diagram.markers.map((marker, index) => {
+      const at = Number(marker.attrs.at);
+      if (!Number.isFinite(at)) return "";
+      const fraction = (at - time.start) / duration;
+      const x = plotLeft + fraction * plotWidth;
+      const color = marker.attrs.color || "#475569";
+      const label = clippedLineText(marker.attrs.label || marker.id, 20);
+      const labelY = 68 - (index % 2) * 13;
+      return `<g class="waveform-time-marker" data-marker="${escapeHtml(marker.id)}" data-at="${escapeHtml(at)}">
+        <line x1="${x.toFixed(2)}" y1="${plotTop}" x2="${x.toFixed(2)}" y2="${plotBottom}" stroke="${escapeHtml(color)}" stroke-width="1.4" stroke-dasharray="6 5"></line>
+        <path d="M ${(x - 4).toFixed(2)} ${plotTop} L ${(x + 4).toFixed(2)} ${plotTop} L ${x.toFixed(2)} ${(plotTop + 6).toFixed(2)} Z" fill="${escapeHtml(color)}"></path>
+        <text class="waveform-marker" x="${x.toFixed(2)}" y="${labelY}" text-anchor="middle">${escapeHtml(label)} @ ${escapeHtml(waveformFormatValue(at))}${escapeHtml(time.unit)}</text>
+      </g>`;
+    }).join("\n");
+    return `<svg class="diagram-svg waveform-diagram-svg" data-diagram-kind="waveform" data-signal-count="${diagram.signals.length}" data-marker-count="${diagram.markers.length}" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${Math.ceil(height)}" viewBox="0 0 ${width} ${Math.ceil(height)}" role="img">
+      ${title}
+      <style>${STANDALONE_SVG_STYLE}</style>
+      <rect x="0" y="0" width="${width}" height="${Math.ceil(height)}" fill="#ffffff"></rect>
+      <text class="waveform-title" x="24" y="32">${escapeHtml(diagram.title)}</text>
+      <text class="waveform-subtitle" x="24" y="51">Idealized teaching shapes - not measured or simulated data</text>
+      ${bands}
+      <g class="waveform-grid">${grid}</g>
+      ${signals}
+      ${markers}
+      <line x1="${plotLeft}" y1="${plotBottom}" x2="${plotRight}" y2="${plotBottom}" stroke="#334155" stroke-width="1.4"></line>
+      <text class="waveform-time" x="${plotRight}" y="${(plotBottom + 47).toFixed(2)}" text-anchor="end">TIME (${escapeHtml(time.unit)})</text>
+      <rect x="18" y="${plotTop}" width="1064" height="${(plotBottom - plotTop).toFixed(2)}" fill="none" stroke="#94a3b8" stroke-width="1.2"></rect>
+    </svg>`;
+  }
+
   function renderDiagnostics(diagnostics) {
     if (!diagnostics.length) return "";
     return `<div class="diagnostics">${diagnostics.map((diag) => (
@@ -4131,10 +4500,14 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
     return ["wiring", "panel-wiring"].includes(String(language || "").toLowerCase());
   }
 
+  function isWaveformDiagramLanguage(language) {
+    return ["waveform", "waveforms"].includes(String(language || "").toLowerCase());
+  }
+
   function renderMarkdownCircuits(markdown, container) {
     const blocks = extractDiagramBlocks(markdown);
     if (!blocks.length) {
-      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, or wiring code block to render a diagram.</div>`;
+      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, wiring, or waveform code block to render a diagram.</div>`;
       return { blockCount: 0, diagnosticCount: 0, missingLibraries: [] };
     }
 
@@ -4144,6 +4517,9 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
       }
       if (isWiringDiagramLanguage(block.language)) {
         return { kind: "wiring", model: parseWiringDiagram(block.source, { startLine: block.startLine }) };
+      }
+      if (isWaveformDiagramLanguage(block.language)) {
+        return { kind: "waveform", model: parseWaveformDiagram(block.source, { startLine: block.startLine }) };
       }
       const circuit = parseCircuit(block.source, { startLine: block.startLine });
       validateCircuit(circuit);
@@ -4160,7 +4536,9 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
         ? renderLineDiagramSvg(model, { title: `Electrical line diagram block ${index + 1}` })
         : entry.kind === "wiring"
           ? renderWiringDiagramSvg(model, { title: `Panel wiring diagram block ${index + 1}` })
-          : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
+          : entry.kind === "waveform"
+            ? renderWaveformDiagramSvg(model, { title: `Educational waveform block ${index + 1}` })
+            : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
       diagnosticCount += model.diagnostics.length;
       if (entry.kind === "circuit") {
         for (const libraryName of model.librariesToLoad || []) missingLibraries.add(libraryName);
@@ -4170,10 +4548,13 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
         ? `${model.equipment.length} devices, ${model.connections.length} feeders, ${model.controlLinks.length} control links`
         : entry.kind === "wiring"
           ? `${model.devices.length} devices, ${model.wires.length} physical wires`
-          : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
+          : entry.kind === "waveform"
+            ? `${model.signals.length} signals, ${model.markers.length} time markers`
+            : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
       const kindLabel = entry.kind === "line" ? "electrical line"
         : entry.kind === "wiring" ? "panel wiring"
-          : "electronic schematic";
+          : entry.kind === "waveform" ? "educational waveform"
+            : "electronic schematic";
       return `<article class="diagram-card">
         <div class="diagram-header">
           <span>${kindLabel} block ${index + 1}</span>
@@ -4264,7 +4645,9 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
         ? `electrical-line-${button.dataset.downloadSvg}.svg`
         : button.dataset.diagramKind === "wiring"
           ? `panel-wiring-${button.dataset.downloadSvg}.svg`
-          : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
+          : button.dataset.diagramKind === "waveform"
+            ? `waveform-sheet-${button.dataset.downloadSvg}.svg`
+            : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
       downloadBlob(
         serializeSvg(svg),
         filename,
@@ -4280,11 +4663,13 @@ KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
     parseCircuit,
     parseLineDiagram,
     parseWiringDiagram,
+    parseWaveformDiagram,
     validateCircuit,
     validateGlobalLabels,
     renderCircuitSvg,
     renderLineDiagramSvg,
     renderWiringDiagramSvg,
+    renderWaveformDiagramSvg,
     renderMarkdownCircuits,
     serializeSvg
   };
