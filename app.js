@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "schematic-markdown-source-v7";
+  const STORAGE_KEY = "schematic-markdown-source-v8";
   const STANDALONE_SVG_STYLE = `
     text { font-family: Inter, Arial, sans-serif; }
     .symbol-label { font: 600 12px/1.2 Inter, Arial, sans-serif; fill: #172033; }
@@ -21,6 +21,13 @@
     .line-edge-label { font: 700 9px/1 Inter, Arial, sans-serif; fill: #475569; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
     .line-control-label { font: 800 8.5px/1 Inter, Arial, sans-serif; letter-spacing: 0; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
     .line-title { font: 800 15px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .wiring-title { font: 800 16px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .wiring-device-ref { font: 800 12px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .wiring-device-label { font: 600 10px/1 Inter, Arial, sans-serif; fill: #475569; }
+    .wiring-device-type { font: 800 9px/1 Inter, Arial, sans-serif; fill: #94a3b8; }
+    .wiring-terminal-label { font: 800 9px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .wiring-wire-label { font: 800 9px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .wiring-title-small { font: 700 9px/1 Inter, Arial, sans-serif; fill: #475569; }
   `;
   const CATALOG = window.KICAD_SYMBOL_CATALOG || { symbols: {}, libraries: {}, loadedLibraries: {}, symbolCount: 0, generatedAt: null };
   const knownSymbolCache = new Map();
@@ -368,6 +375,44 @@ KM1 --> OL1
 OL1 --> AUX
 PR1 --control--> KM1 label="TRIP / ENABLE"
 KM1 --feedback--> PR1 label="AUX STATUS"
+\`\`\`
+
+## Panel wiring sticker - DOL motor starter
+
+\`\`\`wiring
+title "DOL motor starter - panel wiring"
+layout direction=LR gap=86 rowgap=118 wrap=5
+
+X1: terminal_strip label="Incoming and control" terminals="1:L1@left,2:L2@left,3:L3@left,4:PE@left,5:+24V@right,6:0V@right"
+QF1: breaker_3p label="Main breaker"
+KM1: contactor label="Main contactor"
+OL1: overload label="Motor overload"
+X2: terminal_strip label="Motor field terminals" terminals="1:U@right,2:V@right,3:W@right,4:PE@right"
+S0: pushbutton_nc label="STOP"
+PR1: protection_relay label="Protection trip" terminals="95:TRIP_IN@left,96:TRIP_OUT@right,DI:KM_AUX@bottom"
+S1: pushbutton_no label="START"
+
+X1.1 --> QF1.1 wire=101 color=BN size=2.5mm2
+X1.2 --> QF1.3 wire=102 color=BK size=2.5mm2
+X1.3 --> QF1.5 wire=103 color=GY size=2.5mm2
+QF1.2 --> KM1.L1 wire=111 color=BN size=2.5mm2
+QF1.4 --> KM1.L2 wire=112 color=BK size=2.5mm2
+QF1.6 --> KM1.L3 wire=113 color=GY size=2.5mm2
+KM1.T1 --> OL1.1 wire=121 color=BN size=2.5mm2
+KM1.T2 --> OL1.3 wire=122 color=BK size=2.5mm2
+KM1.T3 --> OL1.5 wire=123 color=GY size=2.5mm2
+OL1.2 --> X2.1 wire=131 color=BN size=2.5mm2
+OL1.4 --> X2.2 wire=132 color=BK size=2.5mm2
+OL1.6 --> X2.3 wire=133 color=GY size=2.5mm2
+X1.4 --> X2.4 wire=PE1 color=GNYE size=2.5mm2
+
+X1.5 --> S0.1 wire=401 color=RD size=0.75mm2
+S0.2 --> PR1.95 wire=402 color=RD size=0.75mm2
+PR1.96 --> S1.1 wire=403 color=RD size=0.75mm2
+S1.2 --> KM1.A1 wire=404 color=RD size=0.75mm2
+KM1.A2 --> X1.6 wire=405 color=BU size=0.75mm2
+X1.5 --> KM1.13 wire=406 color=RD size=0.75mm2
+KM1.14 --> PR1.DI wire=407 color=OG size=0.75mm2
 \`\`\``;
 
   function escapeHtml(value) {
@@ -545,7 +590,7 @@ KM1 --feedback--> PR1 label="AUX STATUS"
 
   function extractDiagramBlocks(markdown) {
     const blocks = [];
-    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line)\s*$/gim;
+    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring)\s*$/gim;
     let match;
     while ((match = fenceRe.exec(markdown)) !== null) {
       const startIndex = match.index + match[0].length;
@@ -975,6 +1020,249 @@ KM1 --feedback--> PR1 label="AUX STATUS"
     }
     if (visited < diagram.equipment.length) {
       diagnostics.push(error(diagram.connections[0]?.line || 1, "Electrical line diagrams must not contain feeder cycles."));
+    }
+    return diagnostics;
+  }
+
+  const WIRING_DEVICE_ALIASES = {
+    terminals: "terminal_strip",
+    terminal_block: "terminal_strip",
+    breaker: "breaker_3p",
+    mcb_3p: "breaker_3p",
+    mccb_3p: "breaker_3p",
+    contactor_3p: "contactor",
+    ol: "overload",
+    pushbutton: "pushbutton_no",
+    stop_button: "pushbutton_nc",
+    start_button: "pushbutton_no",
+    protective_relay: "protection_relay",
+    pilot_lamp: "lamp"
+  };
+  const WIRING_DEVICE_TYPES = new Set([
+    "terminal_strip", "breaker_3p", "contactor", "overload", "relay",
+    "protection_relay", "pushbutton_no", "pushbutton_nc", "selector",
+    "fuse", "power_supply", "motor", "lamp", "load", "earth"
+  ]);
+  const WIRING_COLOR_CODES = {
+    BK: "#1f2937",
+    BN: "#92400e",
+    RD: "#dc2626",
+    OG: "#ea580c",
+    YE: "#ca8a04",
+    GN: "#15803d",
+    BU: "#2563eb",
+    VT: "#7c3aed",
+    GY: "#64748b",
+    WH: "#cbd5e1",
+    PK: "#db2777",
+    TQ: "#0891b2",
+    GNYE: "#16a34a"
+  };
+
+  function normalizeWiringDeviceType(type) {
+    const normalized = String(type || "").trim().toLowerCase().replace(/-/g, "_");
+    return WIRING_DEVICE_ALIASES[normalized] || normalized;
+  }
+
+  function wiringTerminal(id, label, side) {
+    return { id: String(id), label: String(label || id), side };
+  }
+
+  function defaultWiringTerminals(type) {
+    const maps = {
+      terminal_strip: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      breaker_3p: [
+        wiringTerminal("1", "1/L1", "left"), wiringTerminal("3", "3/L2", "left"), wiringTerminal("5", "5/L3", "left"),
+        wiringTerminal("2", "2/T1", "right"), wiringTerminal("4", "4/T2", "right"), wiringTerminal("6", "6/T3", "right")
+      ],
+      contactor: [
+        wiringTerminal("L1", "L1", "left"), wiringTerminal("L2", "L2", "left"), wiringTerminal("L3", "L3", "left"),
+        wiringTerminal("T1", "T1", "right"), wiringTerminal("T2", "T2", "right"), wiringTerminal("T3", "T3", "right"),
+        wiringTerminal("A1", "A1", "top"), wiringTerminal("13", "13", "top"),
+        wiringTerminal("A2", "A2", "bottom"), wiringTerminal("14", "14", "bottom")
+      ],
+      overload: [
+        wiringTerminal("1", "1/L1", "left"), wiringTerminal("3", "3/L2", "left"), wiringTerminal("5", "5/L3", "left"),
+        wiringTerminal("2", "2/T1", "right"), wiringTerminal("4", "4/T2", "right"), wiringTerminal("6", "6/T3", "right"),
+        wiringTerminal("95", "95", "bottom"), wiringTerminal("96", "96", "bottom")
+      ],
+      relay: [
+        wiringTerminal("A1", "A1", "left"), wiringTerminal("A2", "A2", "right"),
+        wiringTerminal("11", "11", "top"), wiringTerminal("12", "12", "bottom"), wiringTerminal("14", "14", "bottom")
+      ],
+      protection_relay: [
+        wiringTerminal("95", "95", "left"), wiringTerminal("96", "96", "right"),
+        wiringTerminal("A1", "A1", "top"), wiringTerminal("A2", "A2", "bottom")
+      ],
+      pushbutton_no: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      pushbutton_nc: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      selector: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      fuse: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      power_supply: [
+        wiringTerminal("L", "L", "left"), wiringTerminal("N", "N", "left"), wiringTerminal("PE", "PE", "bottom"),
+        wiringTerminal("P", "+", "right"), wiringTerminal("M", "0V", "right")
+      ],
+      motor: [
+        wiringTerminal("U", "U", "left"), wiringTerminal("V", "V", "left"), wiringTerminal("W", "W", "left"),
+        wiringTerminal("PE", "PE", "bottom")
+      ],
+      lamp: [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")],
+      load: [wiringTerminal("L", "L", "left"), wiringTerminal("N", "N", "right")],
+      earth: [wiringTerminal("PE", "PE", "left")]
+    };
+    return (maps[type] || [wiringTerminal("1", "1", "left"), wiringTerminal("2", "2", "right")])
+      .map((terminal) => ({ ...terminal }));
+  }
+
+  function parseWiringTerminals(value, device, diagnostics) {
+    if (!value) return defaultWiringTerminals(device.type);
+    const terminals = [];
+    const seen = new Set();
+    for (const rawEntry of String(value).split(",")) {
+      const entry = rawEntry.trim();
+      if (!entry) continue;
+      const match = entry.match(/^([^:@\s]+)(?::([^@]+))?@(left|right|top|bottom)$/i);
+      if (!match) {
+        diagnostics.push(error(device.line, `Device "${device.ref}" has invalid terminal "${entry}"; use id:label@side.`));
+        continue;
+      }
+      const id = match[1];
+      const key = id.toLowerCase();
+      if (seen.has(key)) {
+        diagnostics.push(error(device.line, `Device "${device.ref}" has duplicate terminal "${id}".`));
+        continue;
+      }
+      seen.add(key);
+      terminals.push(wiringTerminal(id, (match[2] || id).trim(), match[3].toLowerCase()));
+    }
+    if (!terminals.length) diagnostics.push(error(device.line, `Device "${device.ref}" must define at least one terminal.`));
+    return terminals;
+  }
+
+  function parseWiringEndpoint(ref, terminal) {
+    return { ref, terminal, raw: `${ref}.${terminal}` };
+  }
+
+  function wiringWireNumber(wire) {
+    return wire.attrs.wire || wire.attrs.number || "";
+  }
+
+  function isWiringColor(value) {
+    const normalized = String(value || "").toUpperCase();
+    return Boolean(WIRING_COLOR_CODES[normalized]) || isColor(value);
+  }
+
+  function parseWiringDiagram(source, options = {}) {
+    const startLine = options.startLine || 1;
+    const diagram = {
+      kind: "wiring",
+      title: "Panel wiring diagram",
+      layout: null,
+      devices: [],
+      wires: [],
+      deviceByRef: new Map(),
+      diagnostics: []
+    };
+    const seenWires = new Set();
+
+    source.split(/\r\n|\r|\n/).forEach((rawLine, index) => {
+      const lineNumber = startLine + index;
+      const line = stripComment(rawLine);
+      if (!line) return;
+
+      const titleMatch = line.match(/^title\s+(.+)$/i);
+      if (titleMatch) {
+        diagram.title = unquoteValue(titleMatch[1]);
+        return;
+      }
+
+      const layoutMatch = line.match(/^layout\b(.*)$/i);
+      if (layoutMatch) {
+        if (diagram.layout) {
+          diagram.diagnostics.push(error(lineNumber, "Only one layout declaration is allowed per wiring diagram."));
+          return;
+        }
+        diagram.layout = { attrs: parseAttributes(layoutMatch[1]), line: lineNumber };
+        return;
+      }
+
+      const wireMatch = line.match(/^([A-Za-z_][\w-]*)\.([^\s]+)\s*-->\s*([A-Za-z_][\w-]*)\.([^\s]+)(.*)$/);
+      if (wireMatch) {
+        const from = parseWiringEndpoint(wireMatch[1], wireMatch[2]);
+        const to = parseWiringEndpoint(wireMatch[3], wireMatch[4]);
+        const attrs = parseAttributes(wireMatch[5]);
+        const key = [from.raw.toLowerCase(), to.raw.toLowerCase()].sort().join("<->");
+        if (seenWires.has(key)) diagram.diagnostics.push(warning(lineNumber, `Duplicate physical connection "${key}".`));
+        seenWires.add(key);
+        diagram.wires.push({ from, to, attrs, line: lineNumber, index: diagram.wires.length });
+        return;
+      }
+
+      const deviceMatch = line.match(/^([A-Za-z_][\w-]*)\s*:\s*([^\s]+)(.*)$/);
+      if (deviceMatch) {
+        const ref = deviceMatch[1];
+        const rawType = deviceMatch[2];
+        const type = normalizeWiringDeviceType(rawType);
+        const attrs = parseAttributes(deviceMatch[3]);
+        if (diagram.deviceByRef.has(ref)) {
+          diagram.diagnostics.push(error(lineNumber, `Duplicate wiring device reference "${ref}".`));
+          return;
+        }
+        if (!WIRING_DEVICE_TYPES.has(type)) {
+          diagram.diagnostics.push(warning(lineNumber, `Unknown wiring device type "${rawType}"; a generic enclosure will be rendered.`));
+        }
+        const device = { ref, type, rawType, attrs, line: lineNumber, index: diagram.devices.length };
+        device.terminals = parseWiringTerminals(attrs.terminals, device, diagram.diagnostics);
+        device.terminalById = new Map(device.terminals.map((terminal) => [terminal.id.toLowerCase(), terminal]));
+        diagram.devices.push(device);
+        diagram.deviceByRef.set(ref, device);
+        return;
+      }
+
+      diagram.diagnostics.push(error(lineNumber, `Could not parse panel-wiring statement: ${line}`));
+    });
+
+    validateWiringDiagram(diagram);
+    return diagram;
+  }
+
+  function validateWiringDiagram(diagram) {
+    const diagnostics = diagram.diagnostics;
+    const direction = normalizeLayoutDirection(diagram.layout?.attrs.direction, "LR");
+    if (!direction) diagnostics.push(error(diagram.layout?.line || 1, "Wiring layout direction must be LR or TB."));
+    for (const attribute of ["gap", "rowgap"]) {
+      if (!validPositiveNumber(diagram.layout?.attrs[attribute])) {
+        diagnostics.push(error(diagram.layout.line, `Wiring layout ${attribute} must be a positive number.`));
+      }
+    }
+    if (diagram.layout?.attrs.wrap !== undefined) {
+      const wrap = Number(diagram.layout.attrs.wrap);
+      if (!Number.isInteger(wrap) || wrap <= 0) diagnostics.push(error(diagram.layout.line, "Wiring layout wrap must be a positive integer."));
+    }
+
+    const connected = new Set();
+    for (const wire of diagram.wires) {
+      const fromDevice = diagram.deviceByRef.get(wire.from.ref);
+      const toDevice = diagram.deviceByRef.get(wire.to.ref);
+      if (!fromDevice) diagnostics.push(error(wire.line, `Wire references unknown device "${wire.from.ref}".`));
+      if (!toDevice) diagnostics.push(error(wire.line, `Wire references unknown device "${wire.to.ref}".`));
+      const fromTerminal = fromDevice?.terminalById.get(wire.from.terminal.toLowerCase());
+      const toTerminal = toDevice?.terminalById.get(wire.to.terminal.toLowerCase());
+      if (fromDevice && !fromTerminal) diagnostics.push(error(wire.line, `Device "${fromDevice.ref}" has no terminal "${wire.from.terminal}".`));
+      if (toDevice && !toTerminal) diagnostics.push(error(wire.line, `Device "${toDevice.ref}" has no terminal "${wire.to.terminal}".`));
+      if (wire.from.raw.toLowerCase() === wire.to.raw.toLowerCase()) diagnostics.push(error(wire.line, `Wire cannot connect terminal "${wire.from.raw}" to itself.`));
+      if (!wiringWireNumber(wire)) diagnostics.push(warning(wire.line, `Physical wire "${wire.from.raw}->${wire.to.raw}" has no wire number.`));
+      if (wire.attrs.color && !isWiringColor(wire.attrs.color)) diagnostics.push(error(wire.line, `Wire "${wiringWireNumber(wire) || wire.index + 1}" has invalid color "${wire.attrs.color}".`));
+      if (wire.attrs.size && !/^\d+(?:\.\d+)?(?:mm2|awg\d*)$/i.test(wire.attrs.size)) {
+        diagnostics.push(error(wire.line, `Wire "${wiringWireNumber(wire) || wire.index + 1}" has invalid size "${wire.attrs.size}"; use values such as 0.75mm2 or AWG18.`));
+      }
+      if (fromDevice && toDevice && fromTerminal && toTerminal) {
+        connected.add(fromDevice.ref);
+        connected.add(toDevice.ref);
+      }
+    }
+    for (const device of diagram.devices) {
+      if (!connected.has(device.ref)) diagnostics.push(warning(device.line, `Wiring device "${device.ref}" is not connected.`));
     }
     return diagnostics;
   }
@@ -3510,6 +3798,324 @@ KM1 --feedback--> PR1 label="AUX STATUS"
     </svg>`;
   }
 
+  function layoutWiringDiagram(diagram) {
+    const direction = normalizeLayoutDirection(diagram.layout?.attrs.direction, "LR") || "LR";
+    const gap = boundedLayoutNumber(diagram.layout?.attrs.gap, 86, 36, 220);
+    const rowGap = boundedLayoutNumber(diagram.layout?.attrs.rowgap, 118, 60, 260);
+    const wrap = Math.max(1, Math.min(
+      Math.max(1, diagram.devices.length),
+      Math.floor(boundedLayoutNumber(diagram.layout?.attrs.wrap, 5, 1, Math.max(1, diagram.devices.length)))
+    ));
+    const maximumSideTerminals = Math.max(3, ...diagram.devices.map((device) => Math.max(
+      device.terminals.filter((terminal) => terminal.side === "left").length,
+      device.terminals.filter((terminal) => terminal.side === "right").length
+    )));
+    const maximumHorizontalTerminals = Math.max(2, ...diagram.devices.map((device) => Math.max(
+      device.terminals.filter((terminal) => terminal.side === "top").length,
+      device.terminals.filter((terminal) => terminal.side === "bottom").length
+    )));
+    const nodeWidth = Math.max(184, maximumHorizontalTerminals * 48 + 42);
+    const nodeHeight = Math.max(136, maximumSideTerminals * 24 + 70);
+    const itemCount = Math.max(1, diagram.devices.length);
+    const columns = direction === "LR" ? Math.min(wrap, itemCount) : Math.ceil(itemCount / wrap);
+    const rows = direction === "LR" ? Math.ceil(itemCount / wrap) : Math.min(wrap, itemCount);
+    const margin = { left: 54, right: 54, top: 98, bottom: 104 };
+    const width = Math.max(980, margin.left + columns * nodeWidth + Math.max(0, columns - 1) * gap + margin.right);
+    const height = Math.max(620, margin.top + rows * nodeHeight + Math.max(0, rows - 1) * rowGap + margin.bottom);
+
+    diagram.devices.forEach((device, index) => {
+      const column = direction === "LR" ? index % wrap : Math.floor(index / wrap);
+      const row = direction === "LR" ? Math.floor(index / wrap) : index % wrap;
+      const x = margin.left + column * (nodeWidth + gap);
+      const y = margin.top + row * (nodeHeight + rowGap);
+      device.render = { x, y, width: nodeWidth, height: nodeHeight, cx: x + nodeWidth / 2, cy: y + nodeHeight / 2 };
+      const sideGroups = { left: [], right: [], top: [], bottom: [] };
+      for (const terminal of device.terminals) sideGroups[terminal.side].push(terminal);
+      for (const side of ["left", "right"]) {
+        const terminals = sideGroups[side];
+        terminals.forEach((terminal, terminalIndex) => {
+          const available = nodeHeight - 62;
+          const terminalY = y + 48 + (terminalIndex + 1) * available / (terminals.length + 1);
+          terminal.render = { x: side === "left" ? x : x + nodeWidth, y: terminalY, side };
+        });
+      }
+      for (const side of ["top", "bottom"]) {
+        const terminals = sideGroups[side];
+        terminals.forEach((terminal, terminalIndex) => {
+          const terminalX = x + 24 + (terminalIndex + 1) * (nodeWidth - 48) / (terminals.length + 1);
+          terminal.render = { x: terminalX, y: side === "top" ? y : y + nodeHeight, side };
+        });
+      }
+    });
+    return { width, height, direction, gap, rowGap, wrap, margin, nodeWidth, nodeHeight };
+  }
+
+  function wiringTerminalPoint(diagram, endpoint, laneOffset = 0) {
+    const device = diagram.deviceByRef.get(endpoint.ref);
+    const terminal = device?.terminalById.get(endpoint.terminal.toLowerCase());
+    if (!terminal?.render) return null;
+    const point = { ...terminal.render };
+    if (point.side === "left" || point.side === "right") point.y += laneOffset;
+    else point.x += laneOffset;
+    return point;
+  }
+
+  function wiringRoutingObstacle(device) {
+    const render = device.render;
+    const clearance = 15;
+    return {
+      left: render.x - clearance,
+      right: render.x + render.width + clearance,
+      top: render.y - clearance,
+      bottom: render.y + render.height + clearance
+    };
+  }
+
+  function wiringTerminalStub(point, device) {
+    const obstacle = wiringRoutingObstacle(device);
+    if (point.side === "left") return { x: obstacle.left - 2, y: point.y };
+    if (point.side === "right") return { x: obstacle.right + 2, y: point.y };
+    if (point.side === "top") return { x: point.x, y: obstacle.top - 2 };
+    return { x: point.x, y: obstacle.bottom + 2 };
+  }
+
+  function createWiringRoutingContext(diagram, layout) {
+    const endpointWires = new Map();
+    for (const wire of diagram.wires) {
+      for (const side of ["from", "to"]) {
+        const endpoint = wire[side];
+        const endpointKey = `${endpoint.ref.toLowerCase()}.${endpoint.terminal.toLowerCase()}`;
+        const entries = endpointWires.get(endpointKey) || [];
+        entries.push({ wireIndex: wire.index, side });
+        endpointWires.set(endpointKey, entries);
+      }
+    }
+    const endpointLanes = new Map();
+    for (const entries of endpointWires.values()) {
+      entries.forEach((entry, index) => {
+        const centeredIndex = index - (entries.length - 1) / 2;
+        endpointLanes.set(`${entry.wireIndex}:${entry.side}`, centeredIndex * 8);
+      });
+    }
+    const reservedAreas = [
+      { left: 18, right: layout.width - 18, top: 18, bottom: 66 },
+      { left: 18, right: layout.width - 18, top: layout.height - 76, bottom: layout.height - 18 }
+    ];
+    return {
+      width: layout.width,
+      height: layout.height,
+      obstacles: [...diagram.devices.map(wiringRoutingObstacle), ...reservedAreas],
+      usedCells: new Map(),
+      usedEdges: new Map(),
+      segments: [],
+      failures: [],
+      labelBoxes: [],
+      endpointLanes
+    };
+  }
+
+  function routeWiringWire(wire, diagram, routing) {
+    const fromDevice = diagram.deviceByRef.get(wire.from.ref);
+    const toDevice = diagram.deviceByRef.get(wire.to.ref);
+    const startLane = routing.endpointLanes.get(`${wire.index}:from`) || 0;
+    const endLane = routing.endpointLanes.get(`${wire.index}:to`) || 0;
+    const start = wiringTerminalPoint(diagram, wire.from, startLane);
+    const end = wiringTerminalPoint(diagram, wire.to, endLane);
+    if (!fromDevice || !toDevice || !start || !end) return null;
+    const startStub = wiringTerminalStub(start, fromDevice);
+    const endStub = wiringTerminalStub(end, toDevice);
+    const netId = `physical-wire-${wire.index}`;
+    const startHorizontal = start.side === "left" || start.side === "right";
+    const endHorizontal = end.side === "left" || end.side === "right";
+    const route = routeWithFewBends(startStub, endStub, routing, netId)
+      || routeOrthogonally(startStub, endStub, routing, netId, startHorizontal, endHorizontal);
+    if (!route?.length) {
+      routing.failures.push(`${wire.from.raw}->${wire.to.raw}`);
+      return simplifyOrthogonalPoints([start, startStub, endStub, end]);
+    }
+    const points = [start, startStub];
+    const routeStart = route[0];
+    if (!pointEqual(startStub, routeStart)) {
+      points.push(startHorizontal ? { x: routeStart.x, y: startStub.y } : { x: startStub.x, y: routeStart.y });
+    }
+    points.push(...route);
+    const routeEnd = route.at(-1);
+    if (!pointEqual(routeEnd, endStub)) {
+      points.push(endHorizontal ? { x: routeEnd.x, y: endStub.y } : { x: endStub.x, y: routeEnd.y });
+    }
+    points.push(endStub, end);
+    const simplified = simplifyOrthogonalPoints(points);
+    registerRoutingSegments(simplified, routing, netId);
+    return simplified;
+  }
+
+  function wiringWireColor(wire) {
+    const value = wire.attrs.color || "BK";
+    return WIRING_COLOR_CODES[String(value).toUpperCase()] || value;
+  }
+
+  function wiringWireLabelGeometry(points, labelWidth, routing) {
+    const candidates = [];
+    for (let index = 1; index < points.length; index += 1) {
+      const segment = segmentFromPoints(points[index - 1], points[index]);
+      if (!segment) continue;
+      candidates.push({ segment, length: segment.end - segment.start });
+    }
+    const geometries = [];
+    for (const { segment } of candidates.sort((a, b) => b.length - a.length)) {
+      for (const fraction of [0.5, 0.32, 0.68]) {
+        if (segment.orientation === "horizontal") {
+          const x = segment.start + (segment.end - segment.start) * fraction;
+          for (const offset of [-7, 15, -23, 31, -39, 47]) {
+            const y = segment.constant + offset;
+            geometries.push({
+              x,
+              y,
+              anchor: "middle",
+              box: { left: x - labelWidth / 2, top: y - 11, right: x + labelWidth / 2, bottom: y + 3 }
+            });
+          }
+        } else {
+          const y = segment.start + (segment.end - segment.start) * fraction + 3;
+          for (const offset of [7, -7, 23, -23, 39, -39]) {
+            const x = segment.constant + offset;
+            const anchor = offset > 0 ? "start" : "end";
+            const left = offset > 0 ? x - 3 : x + 3 - labelWidth;
+            geometries.push({
+              x,
+              y,
+              anchor,
+              box: { left, top: y - 11, right: left + labelWidth, bottom: y + 3 }
+            });
+          }
+        }
+      }
+    }
+    const isFree = (geometry) => geometry.box.left >= 22
+      && geometry.box.top >= 22
+      && geometry.box.right <= routing.width - 22
+      && geometry.box.bottom <= routing.height - 22
+      && !routing.obstacles.some((obstacle) => boxesOverlap(geometry.box, obstacle, 2))
+      && !routing.labelBoxes.some((box) => boxesOverlap(geometry.box, box, 4))
+      && !boxIntersectsSegments(geometry.box, routing.segments, 1);
+    const choice = geometries.find(isFree) || geometries[0] || {
+      x: points[0]?.x || 0,
+      y: (points[0]?.y || 0) - 6,
+      anchor: "middle",
+      box: {
+        left: (points[0]?.x || 0) - labelWidth / 2,
+        top: (points[0]?.y || 0) - 17,
+        right: (points[0]?.x || 0) + labelWidth / 2,
+        bottom: (points[0]?.y || 0) - 3
+      }
+    };
+    routing.labelBoxes.push(choice.box);
+    return choice;
+  }
+
+  function renderWiringWire(wire, diagram, routing, routedPoints = null) {
+    const points = routedPoints || routeWiringWire(wire, diagram, routing);
+    if (!points?.length) return "";
+    const path = points.map((point, index) => `${index ? "L" : "M"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+    const color = wiringWireColor(wire);
+    const colorCode = wire.attrs.color || "BK";
+    const wireNumber = wiringWireNumber(wire) || `W${wire.index + 1}`;
+    const label = clippedLineText(wireNumber, 18);
+    const labelWidth = Math.max(28, label.length * 6 + 10);
+    const labelGeometry = wiringWireLabelGeometry(points, labelWidth, routing);
+    const labelLeft = labelGeometry.box.left;
+    const labelTop = labelGeometry.box.top;
+    const greenYellow = String(colorCode).toUpperCase() === "GNYE";
+    const detail = [wireNumber, colorCode, wire.attrs.size, wire.attrs.ferrule].filter(Boolean).join(" | ");
+    return `<g class="wiring-wire" data-wire="${escapeHtml(wireNumber)}" data-from="${escapeHtml(wire.from.raw)}" data-to="${escapeHtml(wire.to.raw)}">
+      <title>${escapeHtml(`${wire.from.raw} to ${wire.to.raw}${detail ? ` | ${detail}` : ""}`)}</title>
+      <path d="${path}" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path>
+      ${greenYellow ? `<path d="${path}" fill="none" stroke="#eab308" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>` : ""}
+      <path d="${path}" fill="none" stroke="${escapeHtml(color)}" stroke-width="2.4" stroke-dasharray="${greenYellow ? "9 5" : "none"}" stroke-linecap="round" stroke-linejoin="round"></path>
+      <rect x="${labelLeft.toFixed(2)}" y="${labelTop.toFixed(2)}" width="${labelWidth.toFixed(2)}" height="14" rx="2" fill="#fff" stroke="#cbd5e1" stroke-width="0.8"></rect>
+      <text class="wiring-wire-label" x="${labelGeometry.x.toFixed(2)}" y="${labelGeometry.y.toFixed(2)}" text-anchor="${labelGeometry.anchor}">${escapeHtml(label)}</text>
+    </g>`;
+  }
+
+  function renderWiringTerminal(terminal, device) {
+    const point = terminal.render;
+    if (!point) return "";
+    let textX = point.x;
+    let textY = point.y + 3;
+    let anchor = "middle";
+    if (point.side === "left") {
+      textX += 12;
+      anchor = "start";
+    } else if (point.side === "right") {
+      textX -= 12;
+      anchor = "end";
+    } else if (point.side === "top") {
+      textY = device.render.y + 58;
+    } else {
+      textY = device.render.y + device.render.height - 9;
+    }
+    return `<g class="wiring-terminal" data-device="${escapeHtml(device.ref)}" data-terminal="${escapeHtml(terminal.id)}">
+      <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="4.2" fill="#fff" stroke="#172033" stroke-width="1.5"></circle>
+      <text class="wiring-terminal-label" x="${textX.toFixed(2)}" y="${textY.toFixed(2)}" text-anchor="${anchor}">${escapeHtml(terminal.label)}</text>
+    </g>`;
+  }
+
+  function renderWiringDevice(device) {
+    const render = device.render;
+    const label = clippedLineText(device.attrs.label || device.rawType.replace(/_/g, " "), 28);
+    const typeLabel = clippedLineText(device.type.replace(/_/g, " ").toUpperCase(), 24);
+    const terminals = device.terminals.map((terminal) => renderWiringTerminal(terminal, device)).join("\n");
+    return `<g class="wiring-device" data-ref="${escapeHtml(device.ref)}" data-type="${escapeHtml(device.type)}" data-box-left="${render.x.toFixed(2)}" data-box-top="${render.y.toFixed(2)}" data-box-right="${(render.x + render.width).toFixed(2)}" data-box-bottom="${(render.y + render.height).toFixed(2)}">
+      <rect x="${render.x.toFixed(2)}" y="${render.y.toFixed(2)}" width="${render.width.toFixed(2)}" height="${render.height.toFixed(2)}" rx="4" fill="#f8fafc" stroke="#334155" stroke-width="1.6"></rect>
+      <line x1="${(render.x + 10).toFixed(2)}" y1="${(render.y + 45).toFixed(2)}" x2="${(render.x + render.width - 10).toFixed(2)}" y2="${(render.y + 45).toFixed(2)}" stroke="#cbd5e1" stroke-width="1"></line>
+      <text class="wiring-device-ref" x="${render.cx.toFixed(2)}" y="${(render.y + 19).toFixed(2)}" text-anchor="middle">${escapeHtml(device.ref)}</text>
+      <text class="wiring-device-label" x="${render.cx.toFixed(2)}" y="${(render.y + 36).toFixed(2)}" text-anchor="middle">${escapeHtml(label)}</text>
+      <text class="wiring-device-type" x="${render.cx.toFixed(2)}" y="${(render.cy + 7).toFixed(2)}" text-anchor="middle">${escapeHtml(typeLabel)}</text>
+      ${terminals}
+    </g>`;
+  }
+
+  function renderWiringTitleBlock(diagram, layout) {
+    const footerTop = layout.height - 76;
+    const right = layout.width - 18;
+    return `<g class="wiring-page-frame">
+      <rect x="18" y="18" width="${(layout.width - 36).toFixed(2)}" height="${(layout.height - 36).toFixed(2)}" fill="none" stroke="#172033" stroke-width="1.8"></rect>
+      <text class="wiring-title" x="32" y="44">${escapeHtml(diagram.title)}</text>
+      <line x1="18" y1="${footerTop.toFixed(2)}" x2="${right.toFixed(2)}" y2="${footerTop.toFixed(2)}" stroke="#172033" stroke-width="1.4"></line>
+      <line x1="${(layout.width * 0.58).toFixed(2)}" y1="${footerTop.toFixed(2)}" x2="${(layout.width * 0.58).toFixed(2)}" y2="${(layout.height - 18).toFixed(2)}" stroke="#172033" stroke-width="1"></line>
+      <line x1="${(layout.width * 0.82).toFixed(2)}" y1="${footerTop.toFixed(2)}" x2="${(layout.width * 0.82).toFixed(2)}" y2="${(layout.height - 18).toFixed(2)}" stroke="#172033" stroke-width="1"></line>
+      <text class="wiring-device-ref" x="32" y="${(footerTop + 22).toFixed(2)}">PANEL WIRING</text>
+      <text class="wiring-title-small" x="32" y="${(footerTop + 42).toFixed(2)}">Terminal-to-terminal assembly drawing</text>
+      <text class="wiring-device-ref" x="${(layout.width * 0.6).toFixed(2)}" y="${(footerTop + 22).toFixed(2)}">${diagram.devices.length} DEVICES / ${diagram.wires.length} WIRES</text>
+      <text class="wiring-title-small" x="${(layout.width * 0.6).toFixed(2)}" y="${(footerTop + 42).toFixed(2)}">Wire labels: number | color | size in source</text>
+      <text class="wiring-device-ref" x="${(layout.width * 0.84).toFixed(2)}" y="${(footerTop + 22).toFixed(2)}">SHEET 1</text>
+      <text class="wiring-title-small" x="${(layout.width * 0.84).toFixed(2)}" y="${(footerTop + 42).toFixed(2)}">VERIFY BEFORE WIRING</text>
+    </g>`;
+  }
+
+  function renderWiringDiagramSvg(diagram, options = {}) {
+    const layout = layoutWiringDiagram(diagram);
+    const routing = createWiringRoutingContext(diagram, layout);
+    const routedWires = diagram.wires.map((wire) => ({
+      wire,
+      points: routeWiringWire(wire, diagram, routing)
+    }));
+    const wires = routedWires.map(({ wire, points }) => (
+      renderWiringWire(wire, diagram, routing, points)
+    )).join("\n");
+    const devices = diagram.devices.map(renderWiringDevice).join("\n");
+    const frame = renderWiringTitleBlock(diagram, layout);
+    const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    return `<svg class="diagram-svg wiring-diagram-svg" data-diagram-kind="wiring" data-device-count="${diagram.devices.length}" data-wire-count="${diagram.wires.length}" data-routing-failures="${escapeHtml(routing.failures.join(","))}" xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(layout.width)}" height="${Math.ceil(layout.height)}" viewBox="0 0 ${Math.ceil(layout.width)} ${Math.ceil(layout.height)}" role="img">
+      ${title}
+      <style>${STANDALONE_SVG_STYLE}</style>
+      <rect x="0" y="0" width="${Math.ceil(layout.width)}" height="${Math.ceil(layout.height)}" fill="#ffffff"></rect>
+      ${frame}
+      ${wires}
+      ${devices}
+    </svg>`;
+  }
+
   function renderDiagnostics(diagnostics) {
     if (!diagnostics.length) return "";
     return `<div class="diagnostics">${diagnostics.map((diag) => (
@@ -3521,16 +4127,23 @@ KM1 --feedback--> PR1 label="AUX STATUS"
     return ["line", "line-diagram", "singleline", "single-line", "one-line"].includes(String(language || "").toLowerCase());
   }
 
+  function isWiringDiagramLanguage(language) {
+    return ["wiring", "panel-wiring"].includes(String(language || "").toLowerCase());
+  }
+
   function renderMarkdownCircuits(markdown, container) {
     const blocks = extractDiagramBlocks(markdown);
     if (!blocks.length) {
-      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit or line code block to render a diagram.</div>`;
+      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, or wiring code block to render a diagram.</div>`;
       return { blockCount: 0, diagnosticCount: 0, missingLibraries: [] };
     }
 
     const diagrams = blocks.map((block) => {
       if (isLineDiagramLanguage(block.language)) {
         return { kind: "line", model: parseLineDiagram(block.source, { startLine: block.startLine }) };
+      }
+      if (isWiringDiagramLanguage(block.language)) {
+        return { kind: "wiring", model: parseWiringDiagram(block.source, { startLine: block.startLine }) };
       }
       const circuit = parseCircuit(block.source, { startLine: block.startLine });
       validateCircuit(circuit);
@@ -3545,7 +4158,9 @@ KM1 --feedback--> PR1 label="AUX STATUS"
       const model = entry.model;
       const svg = entry.kind === "line"
         ? renderLineDiagramSvg(model, { title: `Electrical line diagram block ${index + 1}` })
-        : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
+        : entry.kind === "wiring"
+          ? renderWiringDiagramSvg(model, { title: `Panel wiring diagram block ${index + 1}` })
+          : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
       diagnosticCount += model.diagnostics.length;
       if (entry.kind === "circuit") {
         for (const libraryName of model.librariesToLoad || []) missingLibraries.add(libraryName);
@@ -3553,13 +4168,18 @@ KM1 --feedback--> PR1 label="AUX STATUS"
       const errorCount = model.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
       const meta = entry.kind === "line"
         ? `${model.equipment.length} devices, ${model.connections.length} feeders, ${model.controlLinks.length} control links`
-        : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
+        : entry.kind === "wiring"
+          ? `${model.devices.length} devices, ${model.wires.length} physical wires`
+          : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
+      const kindLabel = entry.kind === "line" ? "electrical line"
+        : entry.kind === "wiring" ? "panel wiring"
+          : "electronic schematic";
       return `<article class="diagram-card">
         <div class="diagram-header">
-          <span>${entry.kind === "line" ? "electrical line" : "electronic schematic"} block ${index + 1}</span>
+          <span>${kindLabel} block ${index + 1}</span>
           <div class="diagram-meta">
             <span>${meta}${errorCount ? ` <strong class="diagram-error-badge">${errorCount} error${errorCount === 1 ? "" : "s"}</strong>` : ""}</span>
-            <button class="button-secondary download-svg" type="button" data-download-svg="${index + 1}" data-diagram-kind="${entry.kind}" aria-label="Download ${entry.kind === "line" ? "electrical line" : "electronic schematic"} block ${index + 1} as SVG">Download SVG</button>
+            <button class="button-secondary download-svg" type="button" data-download-svg="${index + 1}" data-diagram-kind="${entry.kind}" aria-label="Download ${kindLabel} block ${index + 1} as SVG">Download SVG</button>
           </div>
         </div>
         <div class="diagram-canvas">${svg}</div>
@@ -3642,7 +4262,9 @@ KM1 --feedback--> PR1 label="AUX STATUS"
       if (!svg) return;
       const filename = button.dataset.diagramKind === "line"
         ? `electrical-line-${button.dataset.downloadSvg}.svg`
-        : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
+        : button.dataset.diagramKind === "wiring"
+          ? `panel-wiring-${button.dataset.downloadSvg}.svg`
+          : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
       downloadBlob(
         serializeSvg(svg),
         filename,
@@ -3657,10 +4279,12 @@ KM1 --feedback--> PR1 label="AUX STATUS"
     extractCircuitBlocks: extractDiagramBlocks,
     parseCircuit,
     parseLineDiagram,
+    parseWiringDiagram,
     validateCircuit,
     validateGlobalLabels,
     renderCircuitSvg,
     renderLineDiagramSvg,
+    renderWiringDiagramSvg,
     renderMarkdownCircuits,
     serializeSvg
   };

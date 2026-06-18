@@ -4,7 +4,7 @@
 
 Parametric Markdown is an early-stage, text-first design language and browser renderer for creating technical designs from readable Markdown-like source. The long-term goal is one deterministic language that humans and LLMs can write, review, version, validate, and exchange with established engineering tools.
 
-The project currently focuses on **electronic schematics** and **electrical single-line diagrams**. Panel wiring diagrams, PCB design, and parametric 3D CAD are planned but are not implemented yet.
+The project currently supports **electronic schematics**, **electrical single-line diagrams**, and an initial **physical panel-wiring** domain. PCB design and parametric 3D CAD remain planned work.
 
 ## Why Parametric Markdown?
 
@@ -29,11 +29,11 @@ Parametric Markdown is a prototype. The current browser application includes:
 - Structural diagnostics for missing symbols, open pins, invalid references, and connection errors.
 - Electrical single-line diagrams with sources, protection, buses, contactors, relays, loads, and branches.
 - Separate power feeders, relay control commands, and equipment-status feedback.
+- Physical panel-wiring blocks with terminal IDs, wire numbers, colors, sizes, automatic routing, and sticker-style SVG output.
 - SVG and Markdown downloads.
 
 Not implemented yet:
 
-- Panel wiring and sticker-ready connection diagrams.
 - KiCad schematic or PCB export.
 - PCB footprints, placement, routing, layers, zones, and design rules.
 - Parametric 2D sketches or 3D solid modeling.
@@ -48,7 +48,7 @@ cd D:\Rakesh_patil\schematic_markdown
 python -m http.server 4173
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example demonstrates electronic sheets and an electrical distribution line diagram.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example demonstrates electronic sheets, an electrical distribution line diagram, and a DOL starter panel-wiring sticker.
 
 ## Language Examples
 
@@ -100,6 +100,24 @@ KM1 --feedback--> PR1 label="AUX STATUS"
 
 Power feeders use `-->`. Control and feedback are separate relationships because a feedback loop must not become a cycle in the power-flow graph.
 
+### Physical Panel Wiring
+
+````markdown
+```wiring
+title "DOL starter panel wiring"
+layout direction=LR gap=86 rowgap=118 wrap=5
+
+X1: terminal_strip label="Incoming" terminals="1:L1@left,2:L2@left,3:L3@left,4:PE@left"
+QF1: breaker_3p label="Main breaker"
+KM1: contactor label="Main contactor"
+
+X1.1 --> QF1.1 wire=101 color=BN size=2.5mm2
+QF1.2 --> KM1.L1 wire=111 color=BN size=2.5mm2
+```
+````
+
+Unlike a `line` block, a `wiring` block represents physical conductors between real device terminals. The renderer validates endpoint references and wire metadata, then produces a numbered sticker-style SVG.
+
 ## Roadmap
 
 The roadmap is directional. Future syntax will be designed and validated before it is documented as part of the language.
@@ -130,8 +148,9 @@ The roadmap is directional. Future syntax will be designed and validated before 
 - [x] Protection, distribution, contactor, relay, motor, and load symbols.
 - [x] Separate feeder, control, and feedback relationships.
 - [ ] Add current transformers, protection functions, meters, generators, ATS systems, and multi-source distribution.
-- [ ] Define physical panel wiring with terminals, wire numbers, ferrules, cable cores, colors, and cross-references.
-- [ ] Produce print- and sticker-ready wiring diagrams for control panels.
+- [x] Define initial physical panel wiring with terminals, wire numbers, colors, sizes, and optional ferrules.
+- [x] Produce sticker-style SVG wiring diagrams for control panels.
+- [ ] Add cable cores, cross-references, enclosure zones, and device-location metadata.
 - [ ] Add cable schedules, terminal plans, and wire lists.
 
 ### 4. PCB Design And KiCad Exchange
