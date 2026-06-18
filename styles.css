@@ -1,0 +1,382 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --ink: #172033;
+  --muted: #647084;
+  --line: #d8dee9;
+  --accent: #0f766e;
+  --accent-dark: #115e59;
+  --danger: #b42318;
+  --warn: #9a5b00;
+  --code-bg: #101827;
+  --code-ink: #e8eef8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-header {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.app-header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+}
+
+.status {
+  max-width: 48ch;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(340px, 42%) minmax(420px, 58%);
+  gap: 0;
+}
+
+.editor-pane,
+.preview-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-pane {
+  border-right: 1px solid var(--line);
+  background: var(--code-bg);
+}
+
+.preview-pane {
+  background: var(--bg);
+}
+
+.pane-title {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.editor-pane .pane-title {
+  background: #0c1321;
+  color: #cbd5e1;
+  border-color: #243049;
+}
+
+.pane-actions,
+.diagram-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+button {
+  appearance: none;
+  border: 1px solid #2f5d58;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 6px 10px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-dark);
+}
+
+.button-secondary {
+  border-color: #94a3b8;
+  background: #ffffff;
+  color: #334155;
+}
+
+.button-secondary:hover {
+  border-color: #64748b;
+  background: #f1f5f9;
+}
+
+.editor-pane .button-secondary {
+  border-color: #475569;
+  background: #172033;
+  color: #e2e8f0;
+}
+
+.editor-pane .button-secondary:hover {
+  background: #243049;
+}
+
+textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  padding: 18px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font: 13px/1.55 "Cascadia Code", "Fira Code", Consolas, monospace;
+  tab-size: 2;
+  overflow: scroll;
+  scrollbar-color: #64748b #0c1321;
+  scrollbar-width: auto;
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  overflow: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-color: #64748b #e2e8f0;
+  scrollbar-width: auto;
+  padding: 18px;
+}
+
+.diagram-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  margin: 0 0 18px;
+  overflow: hidden;
+}
+
+.diagram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.download-svg {
+  flex: none;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.diagram-meta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.diagram-canvas {
+  overflow: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-color: #64748b #e2e8f0;
+  scrollbar-width: auto;
+  padding: 16px;
+}
+
+textarea::-webkit-scrollbar,
+.preview::-webkit-scrollbar,
+.diagram-canvas::-webkit-scrollbar {
+  width: 13px;
+  height: 13px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: #0c1321;
+}
+
+.preview::-webkit-scrollbar-track,
+.diagram-canvas::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+textarea::-webkit-scrollbar-thumb,
+.preview::-webkit-scrollbar-thumb,
+.diagram-canvas::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  border: 3px solid transparent;
+  border-radius: 7px;
+  background: #64748b;
+  background-clip: padding-box;
+}
+
+textarea::-webkit-scrollbar-thumb:hover,
+.preview::-webkit-scrollbar-thumb:hover,
+.diagram-canvas::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+  background-clip: padding-box;
+}
+
+textarea::-webkit-scrollbar-corner,
+.preview::-webkit-scrollbar-corner,
+.diagram-canvas::-webkit-scrollbar-corner {
+  background: #cbd5e1;
+}
+
+.diagram-svg {
+  width: auto;
+  min-width: 100%;
+  max-width: none;
+  height: auto;
+  display: block;
+}
+
+.symbol-shell {
+  overflow: visible;
+}
+
+.symbol-label {
+  font: 600 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  fill: #172033;
+}
+
+.wire {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wire-underlay {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.junction-dot {
+  fill: currentColor;
+}
+
+.net-label text {
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+.net-label-scope {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.net-label-local polygon {
+  stroke-dasharray: 3 2;
+}
+
+.no-connect line {
+  stroke: #dc2626;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.fallback-symbol {
+  fill: #f8fafc;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.diagnostics {
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  background: #fff7ed;
+}
+
+.diagnostic {
+  margin: 0 0 6px;
+  color: var(--warn);
+  font: 13px/1.4 "Cascadia Code", Consolas, monospace;
+}
+
+.diagnostic.error {
+  color: var(--danger);
+}
+
+.diagram-error-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.empty-state {
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 42%) minmax(0, 58%);
+  }
+
+  .editor-pane {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .preview-pane {
+    min-height: 0;
+  }
+
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .status {
+    text-align: left;
+  }
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parametric Markdown</title>
+  <link rel="stylesheet" href="styles.css?v=20260618-line1">
+  <script src="symbols.generated.js" defer></script>
+  <script src="app.js?v=20260618-brand1" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Parametric Markdown</h1>
+      <p>Design as text for humans and machines</p>
+    </div>
+    <div class="status" id="catalogStatus">Loading symbol catalog...</div>
+  </header>
+
+  <main class="workspace">
+    <section class="editor-pane" aria-label="Markdown editor">
+      <div class="pane-title">
+        <span>Markdown</span>
+        <div class="pane-actions">
+          <button id="downloadMarkdown" class="button-secondary" type="button">Download Markdown</button>
+          <button id="resetExample" type="button">Reset Example</button>
+        </div>
+      </div>
+      <textarea id="editor" spellcheck="false" aria-label="Markdown input"></textarea>
+    </section>
+
+    <section class="preview-pane" aria-label="Live preview">
+      <div class="pane-title">
+        <span>Preview</span>
+        <span id="renderStatus">Idle</span>
+      </div>
+      <div id="preview" class="preview"></div>
+    </section>
+  </main>
+</body>
+</html>
