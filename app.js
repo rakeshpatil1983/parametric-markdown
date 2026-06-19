@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const PROJECT_CREATOR = "Rakesh Patil";
   const STORAGE_KEY = "schematic-markdown-source-v9";
   const STANDALONE_SVG_STYLE = `
     text { font-family: Inter, Arial, sans-serif; }
@@ -4593,6 +4594,10 @@ marker SAMPLE at=7 label="sample"
   function serializeSvg(svg) {
     const clone = svg.cloneNode(true);
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("data-creator", PROJECT_CREATOR);
+    const metadata = document.createElementNS("http://www.w3.org/2000/svg", "metadata");
+    metadata.textContent = `Parametric Markdown diagram created by ${PROJECT_CREATOR}`;
+    clone.insertBefore(metadata, clone.firstChild);
     return `<?xml version="1.0" encoding="UTF-8"?>\n${clone.outerHTML}`;
   }
 
@@ -4603,6 +4608,8 @@ marker SAMPLE at=7 label="sample"
     const catalogStatus = document.getElementById("catalogStatus");
     const resetExample = document.getElementById("resetExample");
     const downloadMarkdown = document.getElementById("downloadMarkdown");
+
+    if (!editor || !preview || !renderStatus || !catalogStatus || !resetExample || !downloadMarkdown) return;
 
     updateCatalogStatus(catalogStatus);
 
@@ -4658,6 +4665,8 @@ marker SAMPLE at=7 label="sample"
   }
 
   window.SchematicMarkdown = {
+    creator: PROJECT_CREATOR,
+    entryFile: "app.js",
     extractDiagramBlocks,
     extractCircuitBlocks: extractDiagramBlocks,
     parseCircuit,

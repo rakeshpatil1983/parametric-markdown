@@ -2,6 +2,8 @@
 
 > Design as text for humans and machines.
 
+Created by **Rakesh Patil**.
+
 Parametric Markdown is an early-stage, text-first design language and browser renderer for creating technical designs from readable Markdown-like source. The long-term goal is one deterministic language that humans and LLMs can write, review, version, validate, and exchange with established engineering tools.
 
 The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, and **idealized educational waveforms**. PCB design and parametric 3D CAD remain planned work.
@@ -51,6 +53,36 @@ python -m http.server 4173
 ```
 
 Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example also demonstrates a DOL starter wiring sticker and an educational waveform sheet.
+
+## Browser Integration
+
+The current browser entry point is **`app.js`**. It exposes the renderer as `window.SchematicMarkdown` and can be included without the editor application shell.
+
+For complete electronic schematic support, load `symbols.generated.js` first and keep the generated `symbol-catalog/` directory beside it. Include `styles.css` when using the built-in diagram cards and scrolling behavior.
+
+```html
+<link rel="stylesheet" href="styles.css">
+<script src="symbols.generated.js"></script>
+<script src="app.js"></script>
+
+<div id="diagram"></div>
+<script>
+  const source = [
+    "```waveform",
+    "title \"PWM example\"",
+    "time start=0 end=10 unit=ms divisions=10",
+    "PWM: square low=0 high=5 duty=40 cycles=5 unit=V",
+    "```"
+  ].join("\n");
+
+  window.SchematicMarkdown.renderMarkdownCircuits(
+    source,
+    document.getElementById("diagram")
+  );
+</script>
+```
+
+The API also exposes the individual parsers and SVG renderers. `app.js` remains the prototype entry point until a versioned distribution bundle is extracted.
 
 ## Language Examples
 

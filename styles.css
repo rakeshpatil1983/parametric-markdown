@@ -55,6 +55,13 @@ body {
   color: var(--muted);
 }
 
+.app-header .creator-signature {
+  margin-top: 3px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .status {
   max-width: 48ch;
   text-align: right;
