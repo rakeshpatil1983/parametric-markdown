@@ -56,14 +56,14 @@ Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included e
 
 ## Browser Integration
 
-The current browser entry point is **`app.js`**. It exposes the renderer as `window.SchematicMarkdown` and can be included without the editor application shell.
+The public browser entry point is **`parametric-markdown.js`**. It exposes the renderer as `window.SchematicMarkdown` and can be included without the editor application shell.
 
 For complete electronic schematic support, load `symbols.generated.js` first and keep the generated `symbol-catalog/` directory beside it. Include `styles.css` when using the built-in diagram cards and scrolling behavior.
 
 ```html
 <link rel="stylesheet" href="styles.css">
 <script src="symbols.generated.js"></script>
-<script src="app.js"></script>
+<script src="parametric-markdown.js"></script>
 
 <div id="diagram"></div>
 <script>
@@ -82,7 +82,7 @@ For complete electronic schematic support, load `symbols.generated.js` first and
 </script>
 ```
 
-The API also exposes the individual parsers and SVG renderers. `app.js` remains the prototype entry point until a versioned distribution bundle is extracted.
+The API also exposes the individual parsers and SVG renderers. The filename follows the same recognizable project-name convention as `mermaid.js`; a versioned distribution bundle can be extracted later without changing the public identity.
 
 ## Language Examples
 
@@ -260,7 +260,7 @@ Each domain may have its own fenced block and vocabulary, but references, units,
 
 ```text
 index.html             Static editor and preview shell
-app.js                 Parsers, validation, layout, routing, and SVG rendering
+parametric-markdown.js Parsers, validation, layout, routing, and SVG rendering
 styles.css             Application and diagram styling
 symbols.generated.js   Generated symbol catalog index
 symbol-catalog/        Generated KiCad symbol-library modules

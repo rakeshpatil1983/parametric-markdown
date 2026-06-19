@@ -4666,7 +4666,7 @@ marker SAMPLE at=7 label="sample"
 
   window.SchematicMarkdown = {
     creator: PROJECT_CREATOR,
-    entryFile: "app.js",
+    entryFile: "parametric-markdown.js",
     extractDiagramBlocks,
     extractCircuitBlocks: extractDiagramBlocks,
     parseCircuit,
