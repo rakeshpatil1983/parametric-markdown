@@ -277,6 +277,10 @@ scripts/               Catalog generation and maintenance scripts
 6. Integrate with established CAD tools rather than trapping designs in a new format.
 7. Treat electrical, mechanical, and manufacturing validation as separate from successful rendering.
 
+## Support
+
+If Parametric Markdown helps you, you can optionally [tip Rakesh Patil via PayPal](https://paypal.me/rakeshpatiltech). Tips support continued open-source development and do not purchase features, support, or special access.
+
 ## Contributing
 
 The project is young, and several language boundaries are intentionally still open. Useful contributions include:
