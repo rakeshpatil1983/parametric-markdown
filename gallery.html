@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Rakesh Patil">
+  <title>Parametric Markdown — Diagram Gallery</title>
+  <link rel="stylesheet" href="styles.css?v=20260622">
+  <style>
+    html, body { height: auto !important; overflow: visible !important; }
+    body { margin: 0; display: block !important; }
+
+    .g-header {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 2.25rem 2.5rem 1.75rem;
+      border-bottom: 3px solid var(--accent);
+    }
+    .g-header h1 { margin: 0 0 0.3rem; font-size: 1.65rem; font-weight: 700; letter-spacing: -0.01em; }
+    .g-header p  { margin: 0; opacity: 0.6; font-size: 0.9rem; }
+    .g-header a  { color: var(--accent); text-decoration: none; }
+    .g-header a:hover { text-decoration: underline; }
+
+    .g-nav {
+      display: flex; gap: 0.5rem;
+      padding: 0.85rem 2.5rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 20;
+      flex-wrap: wrap;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+    }
+    .g-nav a {
+      padding: 0.35rem 0.9rem; border-radius: 999px; text-decoration: none;
+      font-size: 0.82rem; font-weight: 600;
+      background: var(--bg); color: var(--muted); border: 1px solid var(--line);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .g-nav a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .g-nav .nav-sep { flex: 1; }
+    .g-nav .nav-home { font-size: 0.82rem; font-weight: 500; color: var(--muted); text-decoration: none; }
+    .g-nav .nav-home:hover { color: var(--accent); }
+
+    .g-main { padding: 2rem 2.5rem 4rem; max-width: 1440px; margin: 0 auto; }
+
+    .g-section { margin-bottom: 4rem; scroll-margin-top: 4rem; }
+    .g-section-head { margin-bottom: 1.5rem; }
+    .g-section-head h2 { margin: 0 0 0.2rem; font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem; }
+    .section-icon { width: 28px; height: 28px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .g-section-head p { margin: 0; font-size: 0.875rem; color: var(--muted); padding-left: 34px; }
+
+    .g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(580px, 1fr)); gap: 1.5rem; }
+
+    .g-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+    .g-card-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; background: var(--bg); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    .diff-badge { font-size: 0.68rem; font-weight: 700; padding: 0.18rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+    .diff-easy     { background: #dcfce7; color: #15803d; }
+    .diff-medium   { background: #fef3c7; color: #92400e; }
+    .diff-complex  { background: #fee2e2; color: #b91c1c; }
+    .diff-advanced { background: #ede9fe; color: #6d28d9; }
+    .g-card-title { font-weight: 600; font-size: 0.9rem; color: var(--ink); }
+    .g-card-desc  { font-size: 0.78rem; color: var(--muted); margin-left: auto; }
+
+    .g-card-body .diagram-card { border: none !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; }
+
+    /* Pan/zoom canvas */
+    .g-card-body .diagram-canvas {
+      padding: 0;
+      position: relative;
+      overflow: hidden;
+      height: 360px;
+      cursor: grab;
+      user-select: none;
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+    }
+    .g-card-body .diagram-canvas.is-dragging { cursor: grabbing; }
+    .g-card-body .diagram-canvas svg {
+      display: block;
+      max-width: none !important;
+      height: auto !important;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    /* Zoom control buttons (Google Maps style) */
+    .zoom-controls {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 10;
+    }
+    .zoom-btn {
+      width: 30px; height: 30px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      border-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s;
+    }
+    .zoom-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .zoom-btn.zoom-reset { font-size: 11px; font-weight: 700; }
+
+    /* Gallery is a showcase — suppress diagnostic noise from expected single-use label warnings */
+    .g-card-body .diagnostics { display: none !important; }
+    .g-card-body .diagram-error-badge { display: none !important; }
+
+    .g-loading { padding: 3rem 2rem; text-align: center; color: var(--muted); font-size: 0.9rem; }
+    .g-loading-spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 760px) {
+      .g-header { padding: 1.5rem 1rem 1.25rem; }
+      .g-nav    { padding: 0.75rem 1rem; }
+      .g-main   { padding: 1rem 1rem 3rem; }
+      .g-grid   { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="g-header">
+  <h1>Parametric Markdown — Diagram Gallery</h1>
+  <p>Four diagram categories · easiest to most complex · rendered live in your browser ·
+     <a href="index.html">open the editor →</a></p>
+</header>
+
+<nav class="g-nav">
+  <a href="#circuits">⚡ Circuit Schematics</a>
+  <a href="#line">🔌 Line Diagrams</a>
+  <a href="#wiring">🔧 Panel Wiring</a>
+  <a href="#waveform">〜 Waveforms</a>
+  <a href="#sketches">✏ Sketches</a>
+  <a href="#sketches3d">🧊 3-D Sketches</a>
+  <span class="nav-sep"></span>
+  <a class="nav-home" href="index.html">← Open editor</a>
+</nav>
+
+<main class="g-main" id="gallery">
+  <div class="g-loading">
+    <div class="g-loading-spinner"></div>
+    Loading diagram engine…
+  </div>
+</main>
+
+<script src="symbols.generated.js?v=20260622" defer></script>
+<script src="parametric-markdown.js?v=20260622" defer></script>
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+   SYNTAX NOTES for future editing:
+   • Device:R pins are .1 / .2  (NOT .A / .B)
+   • Device:C, Device:C_Polarized pins are .1 / .2
+   • Device:LED, Device:D_Schottky pins are .A / .K
+   • BJT (Q_NPN_BCE) pins: .B .C .E   FET (Q_NMOS_GDS) pins: .G .D .S
+   • group blocks MUST be multi-line: group NAME label="…" direction=LR {\n  REF1\n}
+   • Use local: labels for single-sheet power rails (avoids "open" warning)
+──────────────────────────────────────────────────────────────────────────── */
+
+const EXAMPLES = {
+
+  /* ── CIRCUIT SCHEMATICS ─────────────────────────────────────────── */
+  circuits: {
+    id: "circuits",
+    icon: "⚡",
+    iconBg: "#fef9c3",
+    title: "Circuit Schematics",
+    desc: "Electronic schematic diagrams — components, nets, groups, and cross-sheet labels",
+    examples: [
+      {
+        id: "c1",
+        title: "LED indicator",
+        difficulty: "easy",
+        desc: "Resistor + LED with power rail labels",
+        markdown:
+`\`\`\`circuit
+R1:   Device:R   value="330Ω"
+LED1: Device:LED value="Red LED"
+
+layout direction=LR
+
+R1.1   --> local:VCC   color=#dc2626
+R1.2   --> LED1.A      color=#d97706
+LED1.K --> local:GND   color=#334155
+\`\`\``
+      },
+      {
+        id: "c2",
+        title: "RC low-pass filter",
+        difficulty: "easy",
+        desc: "Resistor-capacitor filter — f₋₃dB = 1/(2π·R·C)",
+        markdown:
+`\`\`\`circuit
+R1: Device:R value="10kΩ"
+C1: Device:C value="10nF"
+
+layout direction=LR gap=70
+
+R1.1 --> local:VIN    color=#2563eb
+R1.2 --> local:VOUT   color=#0f766e
+C1.1 --> local:VOUT   color=#0f766e
+C1.2 --> local:GND    color=#334155
+\`\`\``
+      },
+      {
+        id: "c3",
+        title: "Voltage divider + bypass cap",
+        difficulty: "medium",
+        desc: "Resistor divider producing a stable reference, with bypass capacitor",
+        markdown:
+`\`\`\`circuit
+R1: Device:R value="100kΩ"
+R2: Device:R value="33kΩ"
+C1: Device:C value="100nF"
+
+layout direction=TB gap=60
+
+group DIVIDER label="Voltage divider + bypass" direction=TB {
+  R1 R2 C1
+}
+
+R1.1 --> local:VCC    color=#dc2626
+R1.2 --> local:VREF   color=#d97706
+R2.1 --> local:VREF   color=#d97706
+R2.2 --> local:GND    color=#334155
+C1.1 --> local:VREF   color=#0369a1
+C1.2 --> local:GND    color=#334155
+\`\`\``
+      },
+      {
+        id: "c4",
+        title: "Half-wave rectifier",
+        difficulty: "medium",
+        desc: "Schottky diode rectifier with smoothing cap and resistive load",
+        markdown:
+`\`\`\`circuit
+D1:     Device:D_Schottky  value="1N5819"
+C1:     Device:C_Polarized value="470µF 25V"
+R_LOAD: Device:R           value="100Ω load"
+
+layout direction=LR gap=70
+
+group RECTIFIER label="Rectifier" direction=LR {
+  D1
+}
+group FILTER label="Smoothing" direction=TB {
+  C1
+}
+group LOAD label="Load" direction=LR {
+  R_LOAD
+}
+
+D1.A     --> local:AC_IN    color=#dc2626
+D1.K     --> local:DC_BUS   color=#d97706
+C1.1     --> local:DC_BUS   color=#0369a1
+C1.2     --> local:GND      color=#334155
+R_LOAD.1 --> local:DC_BUS   color=#0f766e
+R_LOAD.2 --> local:GND      color=#334155
+\`\`\``
+      },
+      {
+        id: "c5",
+        title: "BJT common-emitter amplifier",
+        difficulty: "complex",
+        desc: "NPN amplifier with self-bias, emitter degeneration, and AC coupling",
+        markdown:
+`\`\`\`circuit
+C_IN:  Device:C value="10µF"
+R_B1:  Device:R value="100kΩ"
+R_B2:  Device:R value="33kΩ"
+Q1:    Transistor_BJT:Q_NPN_BCE value="2N3904" color=#b45309
+R_C:   Device:R value="4.7kΩ"
+R_E:   Device:R value="1kΩ"
+C_E:   Device:C value="100µF"
+C_OUT: Device:C value="10µF"
+
+layout direction=LR gap=72
+
+group INPUT label="Input coupling" direction=LR {
+  C_IN
+}
+group BIAS label="Bias network" direction=TB {
+  R_B1 R_B2
+}
+group STAGE label="Transistor stage" direction=LR {
+  Q1
+}
+group DEGENR label="Emitter bypass" direction=TB {
+  R_E C_E
+}
+group COLL label="Collector load" direction=TB {
+  R_C
+}
+group OUTPUT label="Output coupling" direction=LR {
+  C_OUT
+}
+
+C_IN.1  --> local:AIN    color=#2563eb
+C_IN.2  --> local:BASE   color=#2563eb
+R_B1.1  --> local:VCC    color=#dc2626
+R_B1.2  --> local:BASE   color=#92400e
+R_B2.1  --> local:BASE   color=#92400e
+R_B2.2  --> local:GND    color=#334155
+Q1.B    --> local:BASE   color=#92400e
+Q1.C    --> R_C.1        color=#d97706
+R_C.2   --> local:VCC    color=#dc2626
+Q1.E    --> R_E.1        color=#0369a1
+Q1.E    --> C_E.1        color=#0369a1
+R_E.2   --> local:GND    color=#334155
+C_E.2   --> local:GND    color=#334155
+Q1.C    --> C_OUT.1      color=#7c3aed
+C_OUT.2 --> local:AOUT   color=#7c3aed
+\`\`\``
+      },
+      {
+        id: "c6",
+        title: "Synchronous buck converter",
+        difficulty: "advanced",
+        desc: "High/low-side FETs, bootstrap, LC output filter, and Type-II feedback compensation",
+        markdown:
+`\`\`\`circuit
+define BUCK_CTRL annotation=U label="Buck Controller" {
+  pin 1 VIN   left
+  pin 2 BST   top
+  pin 3 HO    right
+  pin 4 SW    right
+  pin 5 LO    right
+  pin 6 FB    left
+  pin 7 COMP  left
+  pin 8 GND   bottom
+}
+
+U1:     BUCK_CTRL value="TPS54360"              color=#4f46e5
+Q_H:    Transistor_FET:Q_NMOS_GDS value="High-side FET" color=#b45309
+Q_L:    Transistor_FET:Q_NMOS_GDS value="Low-side FET"  color=#b45309
+L1:     Device:L value="10µH 3A"                color=#7c3aed
+C_BST:  Device:C value="100nF bootstrap"        color=#0369a1
+C_IN:   Device:C_Polarized value="47µF input"   color=#0369a1
+C_OUT:  Device:C_Polarized value="100µF output" color=#0369a1
+R_FB1:  Device:R value="100kΩ upper"            color=#92400e
+R_FB2:  Device:R value="22kΩ lower"             color=#92400e
+C_COMP: Device:C value="10nF comp"              color=#0369a1
+R_COMP: Device:R value="4.7kΩ comp"             color=#92400e
+
+layout direction=LR gap=82
+
+group CTRL label="PWM controller" direction=TB {
+  U1 C_COMP R_COMP
+}
+group HSIDE label="High-side switch" direction=TB {
+  Q_H C_BST
+}
+group LSIDE label="Low-side switch" direction=LR {
+  Q_L
+}
+group FILTER label="Output LC filter" direction=LR {
+  L1 C_OUT
+}
+group FB label="Feedback divider" direction=TB {
+  R_FB1 R_FB2
+}
+
+C_IN.1   --> local:VIN    color=#dc2626
+C_IN.2   --> local:PGND   color=#334155
+U1.VIN   --> local:VIN    color=#dc2626
+Q_H.D    --> local:VIN    color=#dc2626
+U1.HO    --> Q_H.G        color=#d97706
+Q_H.S    --> local:SW     color=#7c3aed
+U1.SW    --> local:SW     color=#7c3aed
+Q_L.D    --> local:SW     color=#7c3aed
+U1.LO    --> Q_L.G        color=#d97706
+Q_L.S    --> local:PGND   color=#334155
+C_BST.1  --> U1.BST       color=#0369a1
+C_BST.2  --> local:SW     color=#0369a1
+L1.1     --> local:SW     color=#7c3aed
+L1.2     --> local:VOUT   color=#16a34a
+C_OUT.1  --> local:VOUT   color=#16a34a
+C_OUT.2  --> local:PGND   color=#334155
+R_FB1.1  --> local:VOUT   color=#16a34a
+R_FB1.2  --> local:FB_MID color=#0f766e
+R_FB2.1  --> local:FB_MID color=#0f766e
+R_FB2.2  --> local:PGND   color=#334155
+U1.FB    --> local:FB_MID color=#0f766e
+U1.COMP  --> R_COMP.1     color=#0891b2
+R_COMP.2 --> C_COMP.1     color=#0891b2
+C_COMP.2 --> local:PGND   color=#334155
+U1.GND   --> local:PGND   color=#334155
+\`\`\``
+      }
+    ]
+  },
+
+  /* ── ELECTRICAL LINE DIAGRAMS ───────────────────────────────────── */
+  line: {
+    id: "line",
+    icon: "🔌",
+    iconBg: "#fee2e2",
+    title: "Electrical Line Diagrams",
+    desc: "Single-line / one-line diagrams for power distribution, motor starters, and industrial protection",
+    examples: [
+      {
+        id: "l1",
+        title: "Residential circuit breaker panel",
+        difficulty: "easy",
+        desc: "Utility supply feeding three branch circuits",
+        markdown:
+`\`\`\`line
+title "Residential branch circuit panel"
+layout direction=TB gap=60 rankgap=48
+
+GRID:  source  label="Utility 230 VAC"    voltage="230 VAC"  phases="1P+N" color=#b91c1c
+MAIN:  breaker label="Main breaker 40A"   rating="40 A"      poles=2       color=#b91c1c
+BUS:   bus     label="Distribution bus"   voltage="230 VAC"                color=#9f1239
+QF1:   breaker label="Lighting 10A"       rating="10 A"      poles=1       color=#2563eb
+QF2:   breaker label="Sockets 16A"        rating="16 A"      poles=1       color=#0f766e
+QF3:   breaker label="Oven 20A"           rating="20 A"      poles=2       color=#d97706
+L1:    load    label="Lighting circuit"   voltage="230 VAC"                color=#2563eb
+L2:    load    label="Socket outlets"     voltage="230 VAC"                color=#0f766e
+L3:    load    label="Kitchen oven"       voltage="230 VAC"                color=#d97706
+
+GRID --> MAIN cable="2C + PE 10mm²"
+MAIN --> BUS
+BUS  --> QF1
+BUS  --> QF2
+BUS  --> QF3
+QF1  --> L1
+QF2  --> L2
+QF3  --> L3
+\`\`\``
+      },
+      {
+        id: "l2",
+        title: "DOL motor starter",
+        difficulty: "medium",
+        desc: "Direct-on-line motor starter with thermal overload and protection relay feedback",
+        markdown:
+`\`\`\`line
+title "DOL motor starter — single-line diagram"
+layout direction=TB gap=60 rankgap=52
+
+SUPPLY: source           label="3-phase 400 VAC"        voltage="400 VAC" phases="3P+N+PE" color=#b91c1c
+QF1:    breaker          label="Main MCB 25A"            rating="25 A"     poles=3 curve=D  color=#b91c1c
+KM1:    contactor        label="Main contactor"          coil="230 VAC"                     color=#7c3aed
+OL1:    overload         label="Thermal overload"        rating="6–10 A"                    color=#d97706
+M1:     motor            label="3-phase induction motor" rating="4 kW / 400 V"             color=#16a34a
+E1:     earth            label="Protective earth"                                            color=#334155
+PR1:    protection_relay label="Motor protection relay"  function="Overload / phase loss"   color=#c2410c
+
+SUPPLY --> QF1 cable="3C + PE 4mm²"
+QF1    --> KM1
+KM1    --> OL1
+OL1    --> M1
+M1     --> E1
+PR1    --control-->  KM1 label="TRIP"
+KM1    --feedback--> PR1 label="AUX"
+\`\`\``
+      },
+      {
+        id: "l3",
+        title: "Industrial power distribution",
+        difficulty: "complex",
+        desc: "Incoming protection, AC/DC SMPS, two VFD drives, PLC, and power analyser",
+        markdown:
+`\`\`\`line
+title "Industrial control panel — power distribution"
+layout direction=TB gap=64 rankgap=52
+
+GRID:    source           label="Utility 3P 400 VAC"      voltage="400 VAC" phases="3P+N+PE" color=#b91c1c
+QF_MAIN: breaker          label="Incoming MCB 63A"         rating="63 A"     poles=3 curve=C  color=#b91c1c
+SPD1:    spd              label="Surge protection T2"      rating="40 kA"                      color=#b91c1c
+RCD1:    rcd              label="Earth leakage RCD"        rating="63 A / 300 mA" poles=4      color=#b91c1c
+ACBUS:   bus              label="Protected AC bus 400 VAC" voltage="400 VAC"                   color=#9f1239
+METER:   meter            label="Power analyser"                                               color=#334155
+QF1:     breaker          label="SMPS feeder 6A"           rating="6 A"      poles=1 curve=C  color=#7c3aed
+PS1:     power_supply     label="24 VDC SMPS 10A"          input="230 VAC"   output="24 VDC / 10A" color=#7c3aed
+DCBUS:   bus              label="24 VDC control bus"       voltage="24 VDC"                   color=#7c3aed
+PLC:     load             label="PLC + HMI"                voltage="24 VDC"                   color=#d97706
+QF2:     breaker          label="Drive 1 feeder 16A"       rating="16 A"     poles=3 curve=D  color=#0f766e
+KM2:     contactor        label="Drive 1 contactor"        coil="230 VAC"                     color=#0f766e
+VFD1:    load             label="VFD 1 — Pump 7.5kW"      voltage="400 VAC"                  color=#0f766e
+M1:      motor            label="Pump motor 7.5kW"         rating="7.5 kW / IE3"             color=#0f766e
+QF3:     breaker          label="Drive 2 feeder 10A"       rating="10 A"     poles=3 curve=D  color=#2563eb
+KM3:     contactor        label="Drive 2 contactor"        coil="230 VAC"                     color=#2563eb
+VFD2:    load             label="VFD 2 — Fan 4kW"         voltage="400 VAC"                  color=#2563eb
+M2:      motor            label="Fan motor 4kW"            rating="4 kW / IE3"               color=#2563eb
+PR1:     protection_relay label="Central protection relay" function="Multi-function"          color=#c2410c
+
+GRID    --> QF_MAIN cable="4C + PE 16mm²"
+QF_MAIN --> SPD1
+QF_MAIN --> RCD1
+RCD1    --> ACBUS
+ACBUS   --> METER
+ACBUS   --> QF1
+QF1     --> PS1
+PS1     --> DCBUS
+DCBUS   --> PLC
+ACBUS   --> QF2
+QF2     --> KM2
+KM2     --> VFD1
+VFD1    --> M1
+ACBUS   --> QF3
+QF3     --> KM3
+KM3     --> VFD2
+VFD2    --> M2
+PR1     --control-->  KM2 label="TRIP 1"
+PR1     --control-->  KM3 label="TRIP 2"
+KM2     --feedback--> PR1 label="AUX 1"
+KM3     --feedback--> PR1 label="AUX 2"
+\`\`\``
+      }
+    ]
+  },
+
+  /* ── PANEL WIRING ───────────────────────────────────────────────── */
+  wiring: {
+    id: "wiring",
+    icon: "🔧",
+    iconBg: "#dcfce7",
+    title: "Panel Wiring Diagrams",
+    desc: "Physical wiring inside an enclosure — terminal IDs, wire numbers, IEC 60757 colours, and ferrule sizes",
+    examples: [
+      {
+        id: "w1",
+        title: "Control voltage terminal bridge",
+        difficulty: "easy",
+        desc: "+24 VDC and 0 V rails bridged across a 4-way terminal strip",
+        markdown:
+`\`\`\`wiring
+title "Control voltage terminal strip"
+layout direction=LR gap=80 rowgap=100 wrap=4
+
+X1: terminal_strip label="+24V rail" terminals="1:+24V@left,2:+24V@left,3:+24V@left,4:+24V@left"
+X2: terminal_strip label="0V rail"   terminals="1:0V@left,2:0V@left,3:0V@left,4:0V@left"
+
+X1.1 --> X1.2 wire=101 color=RD size=0.75mm2
+X1.2 --> X1.3 wire=102 color=RD size=0.75mm2
+X1.3 --> X1.4 wire=103 color=RD size=0.75mm2
+X2.1 --> X2.2 wire=201 color=BU size=0.75mm2
+X2.2 --> X2.3 wire=202 color=BU size=0.75mm2
+X2.3 --> X2.4 wire=203 color=BU size=0.75mm2
+\`\`\``
+      },
+      {
+        id: "w2",
+        title: "Start/stop pushbutton station",
+        difficulty: "medium",
+        desc: "NC stop + NO start with contactor coil and self-hold auxiliary contact",
+        markdown:
+`\`\`\`wiring
+title "Start/stop pushbutton wiring — 24 VDC"
+layout direction=LR gap=86 rowgap=110 wrap=4
+
+X1:  terminal_strip label="Supply terminals" terminals="1:+24V@left,2:0V@left"
+S0:  pushbutton_nc  label="STOP S0 (NC)"
+S1:  pushbutton_no  label="START S1 (NO)"
+KM1: contactor      label="Contactor KM1"
+
+X1.1   --> S0.1   wire=401 color=RD size=0.75mm2
+S0.2   --> S1.1   wire=402 color=RD size=0.75mm2
+S1.2   --> KM1.A1 wire=403 color=RD size=0.75mm2
+KM1.A2 --> X1.2   wire=404 color=BU size=0.75mm2
+X1.1   --> KM1.13 wire=405 color=RD size=0.75mm2
+KM1.14 --> S1.1   wire=406 color=OG size=0.75mm2
+\`\`\``
+      },
+      {
+        id: "w3",
+        title: "DOL motor starter — full panel wiring",
+        difficulty: "complex",
+        desc: "Complete power and control wiring with protection relay — 20 physical wires",
+        markdown:
+`\`\`\`wiring
+title "DOL motor starter — complete panel wiring"
+layout direction=LR gap=86 rowgap=118 wrap=5
+
+X1:  terminal_strip   label="Incoming & control" terminals="1:L1@left,2:L2@left,3:L3@left,4:PE@left,5:+24V@right,6:0V@right"
+QF1: breaker_3p       label="Main breaker QF1"
+KM1: contactor        label="Main contactor KM1"
+OL1: overload         label="Motor overload OL1"
+X2:  terminal_strip   label="Motor field"        terminals="1:U@right,2:V@right,3:W@right,4:PE@right"
+S0:  pushbutton_nc    label="STOP S0"
+S1:  pushbutton_no    label="START S1"
+PR1: protection_relay label="Protection relay PR1" terminals="95:TRIP_IN@left,96:TRIP_OUT@right,DI:KM_AUX@bottom"
+
+X1.1   --> QF1.1   wire=101 color=BN   size=2.5mm2
+X1.2   --> QF1.3   wire=102 color=BK   size=2.5mm2
+X1.3   --> QF1.5   wire=103 color=GY   size=2.5mm2
+QF1.2  --> KM1.L1  wire=111 color=BN   size=2.5mm2
+QF1.4  --> KM1.L2  wire=112 color=BK   size=2.5mm2
+QF1.6  --> KM1.L3  wire=113 color=GY   size=2.5mm2
+KM1.T1 --> OL1.1   wire=121 color=BN   size=2.5mm2
+KM1.T2 --> OL1.3   wire=122 color=BK   size=2.5mm2
+KM1.T3 --> OL1.5   wire=123 color=GY   size=2.5mm2
+OL1.2  --> X2.1    wire=131 color=BN   size=2.5mm2
+OL1.4  --> X2.2    wire=132 color=BK   size=2.5mm2
+OL1.6  --> X2.3    wire=133 color=GY   size=2.5mm2
+X1.4   --> X2.4    wire=PE1 color=GNYE size=2.5mm2
+X1.5   --> S0.1    wire=401 color=RD   size=0.75mm2
+S0.2   --> PR1.95  wire=402 color=RD   size=0.75mm2
+PR1.96 --> S1.1    wire=403 color=RD   size=0.75mm2
+S1.2   --> KM1.A1  wire=404 color=RD   size=0.75mm2
+KM1.A2 --> X1.6    wire=405 color=BU   size=0.75mm2
+X1.5   --> KM1.13  wire=406 color=RD   size=0.75mm2
+KM1.14 --> PR1.DI  wire=407 color=OG   size=0.75mm2
+\`\`\``
+      }
+    ]
+  },
+
+  /* ── WAVEFORM DIAGRAMS ──────────────────────────────────────────── */
+  waveform: {
+    id: "waveform",
+    icon: "〜",
+    iconBg: "#e0e7ff",
+    title: "Signal Waveform Diagrams",
+    desc: "Idealized educational waveforms — perfect for datasheets, teaching material, and timing documentation",
+    examples: [
+      {
+        id: "wv1",
+        title: "Basic signal shapes",
+        difficulty: "easy",
+        desc: "DC rail, sine wave, and a single enable step transition",
+        markdown:
+`\`\`\`waveform
+title "Basic AC and DC signals"
+time start=0 end=10 unit=ms divisions=10
+
+DC:   dc   label="3.3 V supply rail"         level=3.3   unit=V color=#334155
+AC:   sine label="AC mains (normalised)"     amplitude=1 cycles=2 unit=V color=#2563eb
+STEP: step label="Enable / inhibit signal"   from=0 to=5 at=3    unit=V color=#16a34a
+\`\`\``
+      },
+      {
+        id: "wv2",
+        title: "PWM duty cycle comparison",
+        difficulty: "medium",
+        desc: "25% and 75% PWM with triangle carrier and RC-filtered output",
+        markdown:
+`\`\`\`waveform
+title "PWM dimmer — duty cycle and RC response"
+time start=0 end=20 unit=ms divisions=10
+
+PWM25: square      label="PWM 25% duty"          low=0 high=5    duty=25 cycles=4 unit=V color=#2563eb
+PWM75: square      label="PWM 75% duty"          low=0 high=5    duty=75 cycles=4 unit=V color=#dc2626
+TRI:   triangle    label="Triangle carrier"       min=0 max=5    cycles=4 unit=V color=#d97706
+VC:    exponential label="RC filtered (τ = 4ms)"  from=0 to=3.75 tau=4    unit=V color=#16a34a
+
+marker RISE   at=5  label="25%→75%"
+marker STEADY at=15 label="steady state"
+\`\`\``
+      },
+      {
+        id: "wv3",
+        title: "SPI bus timing diagram",
+        difficulty: "complex",
+        desc: "CS̄, SCLK, MOSI, MISO, DRDY, and internal ADC ramp with transaction markers",
+        markdown:
+`\`\`\`waveform
+title "SPI 4-wire bus — byte transaction timing"
+time start=0 end=16 unit=µs divisions=16
+
+CS:   square   label="CS̄  (active-low)"      low=5  high=0   duty=75 cycles=1 unit=V color=#334155
+SCLK: square   label="SCLK 1 MHz"            low=0  high=3.3 duty=50 cycles=8 unit=V color=#2563eb
+MOSI: pulse    label="MOSI — command byte"   low=0  high=3.3 at=2  width=8    unit=V color=#d97706
+MISO: pulse    label="MISO — response byte"  low=0  high=3.3 at=6  width=6    unit=V color=#0f766e
+DRDY: pulse    label="DRDY (data ready)"     low=0  high=3.3 at=12 width=2    unit=V color=#7c3aed
+ADC:  sawtooth label="ADC ramp (internal)"   min=0  max=3.3  cycles=2         unit=V color=#dc2626
+
+marker CS_FALL  at=2  label="CS↓"
+marker DATA_TX  at=6  label="TX start"
+marker DATA_RX  at=12 label="DRDY↑"
+marker CS_RISE  at=14 label="CS↑"
+\`\`\``
+      },
+      {
+        id: "wv4",
+        title: "Multi-rail power-on sequencing",
+        difficulty: "advanced",
+        desc: "12V → 5V → 3.3V → 1.8V with enable, power-good flags, and CPU reset sequencing",
+        markdown:
+`\`\`\`waveform
+title "Multi-rail power-on sequence"
+time start=0 end=50 unit=ms divisions=10
+
+EN:     step        label="System enable"          from=0 to=3.3 at=2             unit=V color=#334155
+V12:    exponential label="+12 V rail"             from=0 to=12  tau=3            unit=V color=#dc2626
+V5:     step        label="+5 V rail"              from=0 to=5   at=8             unit=V color=#d97706
+V33:    step        label="+3.3 V rail"            from=0 to=3.3 at=14            unit=V color=#0f766e
+V18:    step        label="+1.8 V core"            from=0 to=1.8 at=20            unit=V color=#2563eb
+PG12:   pulse       label="12V power-good"         low=0 high=3.3 at=8  width=40  unit=V color=#b45309
+PG_ALL: pulse       label="All-rails power-good"   low=0 high=3.3 at=22 width=26  unit=V color=#7c3aed
+RST:    step        label="CPU reset released"     from=0 to=3.3 at=25            unit=V color=#16a34a
+
+marker T_EN   at=2  label="EN↑"
+marker T_12OK at=8  label="12V OK"
+marker T_33OK at=14 label="3.3V OK"
+marker T_18OK at=20 label="1.8V OK"
+marker T_RST  at=25 label="RST↑"
+\`\`\``
+      }
+    ]
+  },
+
+  /* ── 2-D PARAMETRIC SKETCHES ─────────────────────────────────────────── */
+  sketches: {
+    id: "sketches",
+    icon: "✏",
+    iconBg: "#f0fdf4",
+    title: "2-D Parametric Sketches",
+    desc: "CAD-style 2-D sketches — basic shapes, polar curves, datum elements, and dimensions",
+    examples: [
+      {
+        id: "sk1",
+        title: "Basic geometry shapes",
+        difficulty: "easy",
+        desc: "Circle, rectangle, square, triangle, and ellipse with datum origin and axes",
+        markdown:
+`\`\`\`sketch
+title "Basic 2-D Shapes"
+canvas width=540 height=400 scale=2.5 grid=20 originX=270 originY=200
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+circle   C1 center=(0,0)    radius=40 fill=#dbeafe stroke=#2563eb stroke_width=2 label="Circle"
+rect     R1 center=(100,60) width=80 height=50 fill=#fef9c3 stroke=#ca8a04 stroke_width=2 label="Rect"
+square   S1 center=(-100,60) size=60 fill=#fce7f3 stroke=#db2777 stroke_width=2 label="Square"
+triangle T1 at=(0,-70)      base=80 height=60 fill=#dcfce7 stroke=#15803d stroke_width=2
+ellipse  E1 center=(-100,-60) rx=55 ry=30 fill=#ede9fe stroke=#7c3aed stroke_width=2 label="Ellipse"
+polygon  P1 vertices=(100,-40)(140,-80)(180,-40)(160,-10)(120,-10) fill=#ffedd5 stroke=#c2410c stroke_width=2
+\`\`\``
+      },
+      {
+        id: "sk2",
+        title: "Polar curves",
+        difficulty: "medium",
+        desc: "Archimedean spiral, four-petal rose, cardioid, and lemniscate",
+        markdown:
+`\`\`\`sketch
+title "Polar Curves"
+canvas width=540 height=420 scale=4 grid=10 originX=270 originY=210
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+polar ROSE     eq="30*abs(cos(2*t))"   t=[0,2*pi]   samples=600 stroke=#dc2626 stroke_width=2 label="Rose cos(2t)"
+polar SPIRAL   eq="3*t"               t=[0,6*pi]   samples=800 stroke=#2563eb stroke_width=1.5 label="Spiral"
+polar CARDIOID eq="20*(1+cos(t))"     t=[0,2*pi]   samples=500 stroke=#16a34a stroke_width=2 label="Cardioid"
+polar CIRCLE   eq="25"                t=[0,2*pi]   samples=200 stroke=#94a3b8 stroke_width=1 label="r=25"
+\`\`\``
+      },
+      {
+        id: "sk3",
+        title: "Dimensioned slot plate",
+        difficulty: "medium",
+        desc: "Mechanical slot plate with mounting holes, linear dimensions, and radius annotation",
+        markdown:
+`\`\`\`sketch
+title "Slot Plate — mounting dimensions"
+canvas width=540 height=400 scale=2.4 grid=10 originX=270 originY=200
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+rect   PLATE center=(0,0) width=180 height=100 fill=#e0f2fe stroke=#0369a1 stroke_width=2.5
+
+circle H1 center=(-70,30)  radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H1"
+circle H2 center=(70,30)   radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H2"
+circle H3 center=(-70,-30) radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H3"
+circle H4 center=(70,-30)  radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H4"
+
+arc  SLOT center=(0,0) radius=30 start=0 end=270 stroke=#0369a1 stroke_width=2
+
+dim linear DW from=(-90,0) to=(90,0)  offset=-60 label="180 mm"
+dim linear DH from=(0,-50) to=(0,50)  offset=108 label="100 mm"
+dim radius DR ref=H1 label="R10"
+\`\`\``
+      },
+      {
+        id: "sk5",
+        title: "Spur gear — 50 teeth, V-groove profile",
+        difficulty: "advanced",
+        desc: "⌀10 PCD spur gear with 50 teeth modelled via a polar V-groove function, construction circles, and dimensions",
+        markdown:
+`\`\`\`sketch
+title "Spur Gear — ⌀10 PCD, Z=50, V-Groove Polar"
+canvas width=540 height=540 scale=30 grid=1 originX=270 originY=270
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+circle ROOT center=(0,0) radius=4.75 fill=none stroke=#94a3b8 stroke_width=0.5 dashed=true
+circle PCD  center=(0,0) radius=5    fill=none stroke=#2563eb stroke_width=0.7 dashed=true
+circle ADD  center=(0,0) radius=5.2  fill=none stroke=#94a3b8 stroke_width=0.5 dashed=true
+circle HUB  center=(0,0) radius=1.5  fill=#dbeafe stroke=#1d4ed8 stroke_width=1.8 label="BORE"
+
+polar TEETH eq="4.75+0.9*abs(25*t/pi-floor(25*t/pi)-0.5)" t=[0,2*pi] samples=6000 stroke=#1e3a8a stroke_width=1.8 label=""
+
+dim radius DR  ref=PCD  label="R5 (PCD)"
+dim linear  DH from=(0,4.75) to=(0,5.2) offset=7 label="h=0.45"
+\`\`\``
+      },
+      {
+        id: "sk4",
+        title: "Arc, polygon and angle dim",
+        difficulty: "medium",
+        desc: "Arc construction, angle dimension, and an irregular polygon profile",
+        markdown:
+`\`\`\`sketch
+title "Arc and Polygon"
+canvas width=540 height=400 scale=3 grid=20 originX=270 originY=200
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+arc  A1 center=(0,0)  radius=60 start=0   end=120 stroke=#2563eb stroke_width=2.5
+arc  A2 center=(0,0)  radius=60 start=200 end=320 stroke=#dc2626 stroke_width=2.5
+polygon GEAR vertices=(-50,0)(-30,30)(0,50)(30,30)(50,0)(30,-30)(0,-50)(-30,-30) fill=#fef9c3 stroke=#ca8a04 stroke_width=2
+
+dim angle DA1 center=(0,0) r=34 start=0 end=120 label="120°"
+dim angle DA2 center=(0,0) r=20 start=200 end=320 label="120°"
+\`\`\``
+      }
+    ]
+  },
+
+  /* ── 3-D PARAMETRIC SKETCHES ─────────────────────────────────────────── */
+  sketches3d: {
+    id: "sketches3d",
+    icon: "🧊",
+    iconBg: "#eff6ff",
+    title: "3-D Parametric Sketches",
+    desc: "Interactive 3-D pad/pocket models — drag to orbit, scroll to zoom, Shift+drag to pan",
+    examples: [
+      {
+        id: "s3d1",
+        title: "Simple box pad",
+        difficulty: "easy",
+        desc: "A single rectangular pad with XYZ datum axes",
+        markdown:
+`\`\`\`sketch3d
+title "Simple Box"
+canvas width=800 height=360
+view rotX=25 rotY=-35 zoom=1.4
+
+datum axis X
+datum axis Y
+datum axis Z
+
+pad BASE profile=rect center=(0,0) width=100 height=60 plane=z(0) depth=25 color=#3b82f6
+\`\`\``
+      },
+      {
+        id: "s3d2",
+        title: "Box with boss and pocket holes",
+        difficulty: "medium",
+        desc: "Stepped base plate: raised circular boss on top, two pocket cuts",
+        markdown:
+`\`\`\`sketch3d
+title "Base Plate with Boss"
+canvas width=800 height=360
+view rotX=22 rotY=-42 zoom=1.2
+
+datum plane XY
+datum axis X
+datum axis Y
+datum axis Z
+
+pad   BASE profile=rect   center=(0,0)   width=120 height=80  plane=z(0)  depth=20 color=#3b82f6
+pad   BOSS profile=circle center=(0,0)   radius=26            plane=z(20) depth=16 color=#22c55e
+pocket HOLE1 profile=circle center=(42,28) radius=9           plane=z(20) depth=20
+pocket HOLE2 profile=circle center=(-42,28) radius=9          plane=z(20) depth=20
+pocket HOLE3 profile=circle center=(42,-28) radius=9          plane=z(20) depth=20
+pocket HOLE4 profile=circle center=(-42,-28) radius=9         plane=z(20) depth=20
+\`\`\``
+      },
+      {
+        id: "s3d3",
+        title: "Stepped shaft / hub assembly",
+        difficulty: "medium",
+        desc: "Concentric cylinders forming a stepped shaft with a centre bore",
+        markdown:
+`\`\`\`sketch3d
+title "Stepped Shaft"
+canvas width=800 height=360
+view rotX=18 rotY=-55 zoom=1.0
+
+datum axis X
+datum axis Y
+datum axis Z
+
+pad FLANGE profile=circle center=(0,0) radius=52 plane=z(0)  depth=12  color=#f59e0b
+pad SHAFT  profile=circle center=(0,0) radius=26 plane=z(12) depth=44  color=#f59e0b
+pad HUB    profile=circle center=(0,0) radius=13 plane=z(56) depth=20  color=#f59e0b
+pocket BORE profile=circle center=(0,0) radius=7  plane=z(76) depth=76
+\`\`\``
+      },
+      {
+        id: "s3d4",
+        title: "Cover plate with slot pocket",
+        difficulty: "medium",
+        desc: "Rectangular plate with a central slot pocket and rounded-end datum planes",
+        markdown:
+`\`\`\`sketch3d
+title "Cover Plate with Slot"
+canvas width=800 height=360
+view rotX=30 rotY=-30 zoom=1.1
+
+datum plane XY
+datum plane XZ
+datum axis X
+datum axis Y
+datum axis Z
+
+pad   PLATE  profile=rect center=(0,0) width=140 height=90 plane=z(0)  depth=18 color=#8b5cf6
+pocket SLOT  profile=rect center=(0,0) width=80  height=30 plane=z(18) depth=12
+pocket CLR1  profile=circle center=(55,35)  radius=8 plane=z(18) depth=18
+pocket CLR2  profile=circle center=(-55,35) radius=8 plane=z(18) depth=18
+pocket CLR3  profile=circle center=(55,-35) radius=8 plane=z(18) depth=18
+pocket CLR4  profile=circle center=(-55,-35) radius=8 plane=z(18) depth=18
+\`\`\``
+      },
+      {
+        id: "s3d5",
+        title: "Spur gear pair — 2:1 reduction (gear teeth)",
+        difficulty: "advanced",
+        desc: "Two-gear assembly with involute-approximated teeth: T1=20, T2=40, m=3. Stepped shafts, hubs, keyways, housing with bearing seats",
+        markdown:
+`\`\`\`sketch3d
+title "Spur Gear Pair  2:1 reduction  m=3  (T1=20  T2=40)"
+canvas width=800 height=360
+view rotX=30 rotY=-42 zoom=1.0
+
+datum plane XY
+datum axis X
+datum axis Y
+datum axis Z
+
+pad HOUSING   profile=rect   center=(45,45) width=210 height=170  plane=z(-18) depth=18  color=#cbd5e1
+pocket BRG1   profile=circle center=(0,0)   radius=22             plane=z(0)   depth=18
+pocket BRG2   profile=circle center=(0,90)  radius=36             plane=z(0)   depth=18
+
+pad S1_END_L  profile=circle center=(0,0) radius=10 plane=z(0)   depth=12  color=#94a3b8
+pad S1_BODY   profile=circle center=(0,0) radius=12 plane=z(12)  depth=52  color=#94a3b8
+pad S1_END_R  profile=circle center=(0,0) radius=10 plane=z(64)  depth=12  color=#94a3b8
+
+pad G1_BODY   profile=gear   teeth=20 module=3 center=(0,0)   plane=z(16)  depth=22  color=#f59e0b
+pad G1_HUB    profile=circle center=(0,0) radius=16 plane=z(38)  depth=10  color=#f59e0b
+pocket G1_BORE profile=circle center=(0,0) radius=12 plane=z(38) depth=10
+pocket G1_KEY  profile=rect   center=(0,17) width=5 height=10    plane=z(38) depth=10
+
+pad S2_END_L  profile=circle center=(0,90) radius=14 plane=z(0)  depth=12  color=#94a3b8
+pad S2_BODY   profile=circle center=(0,90) radius=16 plane=z(12) depth=58  color=#94a3b8
+pad S2_END_R  profile=circle center=(0,90) radius=14 plane=z(70) depth=12  color=#94a3b8
+
+pad G2_BODY   profile=gear   teeth=40 module=3 center=(0,90) plane=z(12)  depth=26  color=#3b82f6
+pad G2_HUB    profile=circle center=(0,90) radius=22 plane=z(38) depth=16  color=#3b82f6
+pocket G2_BORE profile=circle center=(0,90) radius=16 plane=z(38) depth=16
+pocket G2_KEY  profile=rect   center=(0,107) width=7 height=12   plane=z(38) depth=16
+\`\`\``
+      }
+    ]
+  }
+};
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function diffClass(d) {
+  return { easy: "diff-easy", medium: "diff-medium", complex: "diff-complex", advanced: "diff-advanced" }[d] || "diff-easy";
+}
+
+/* ── Pan / Zoom ──────────────────────────────────────────────────────────── */
+function makeZoomable(host, exId) {
+  const canvas = host.querySelector('.diagram-canvas');
+  if (!canvas) return;
+  const svg = canvas.querySelector('svg');
+  if (!svg) return;
+
+  let scale = 1, tx = 0, ty = 0;
+  let dragging = false, startX = 0, startY = 0, startTx = 0, startTy = 0;
+
+  function applyTransform() {
+    svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  }
+
+  function zoomAt(factor, cx, cy) {
+    const next = Math.max(0.15, Math.min(10, scale * factor));
+    const r = next / scale;
+    tx = cx - r * (cx - tx);
+    ty = cy - r * (cy - ty);
+    scale = next;
+    applyTransform();
+  }
+
+  function fitToCanvas() {
+    const svgW = svg.viewBox.baseVal.width  || svg.getBBox().width  || canvas.clientWidth;
+    const svgH = svg.viewBox.baseVal.height || svg.getBBox().height || 360;
+    const cW = canvas.clientWidth, cH = canvas.clientHeight;
+    scale = Math.min(cW / svgW, cH / svgH, 1);
+    tx = (cW - svgW * scale) / 2;
+    ty = (cH - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  // Fit on first render
+  requestAnimationFrame(fitToCanvas);
+
+  // Zoom control buttons
+  const controls = document.createElement('div');
+  controls.className = 'zoom-controls';
+  controls.innerHTML =
+    `<button class="zoom-btn" title="Zoom in"  data-z="in">+</button>` +
+    `<button class="zoom-btn zoom-reset" title="Fit diagram" data-z="fit">FIT</button>` +
+    `<button class="zoom-btn" title="Zoom out" data-z="out">−</button>`;
+  canvas.appendChild(controls);
+
+  controls.addEventListener('click', e => {
+    const btn = e.target.closest('[data-z]');
+    if (!btn) return;
+    const cW = canvas.clientWidth, cH = canvas.clientHeight;
+    if (btn.dataset.z === 'in')  zoomAt(1.3, cW / 2, cH / 2);
+    if (btn.dataset.z === 'out') zoomAt(1 / 1.3, cW / 2, cH / 2);
+    if (btn.dataset.z === 'fit') fitToCanvas();
+  });
+
+  // Wheel zoom centred on cursor
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  // Mouse-drag pan
+  canvas.addEventListener('mousedown', e => {
+    if (e.target.closest('.zoom-controls')) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    startTx = tx; startTy = ty;
+    canvas.classList.add('is-dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    tx = startTx + (e.clientX - startX);
+    ty = startTy + (e.clientY - startY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; canvas.classList.remove('is-dragging'); }
+  });
+}
+
+/* ── Diagnostic console logging ─────────────────────────────────────────── */
+function logDiagramErrors(host, exId) {
+  const diagEl = host.querySelector('.diagnostics');
+  if (!diagEl) return;
+  const items = [...diagEl.querySelectorAll('*')]
+    .filter(el => el.children.length === 0 && el.textContent.trim())
+    .map(el => el.textContent.trim());
+  if (!items.length) return;
+  console.group(`%c[gallery:#${exId}] ${items.length} diagnostic(s)`, 'color:#f59e0b;font-weight:700');
+  items.forEach(msg => {
+    if (/error/i.test(msg)) console.error(msg);
+    else console.warn(msg);
+  });
+  console.groupEnd();
+}
+
+function loadKiCadLibraries(libraryNames) {
+  const catalog = window.KICAD_SYMBOL_CATALOG;
+  if (!catalog?.libraries) return Promise.resolve();
+  return Promise.all([...new Set(libraryNames)].map((lib) => {
+    if (!catalog.libraries[lib]) return Promise.resolve();
+    if (catalog.loadedLibraries?.[lib] === true) return Promise.resolve();
+    return new Promise((resolve) => {
+      const s = document.createElement("script");
+      s.src = catalog.libraries[lib].file;
+      s.onload = s.onerror = resolve;
+      document.head.appendChild(s);
+    });
+  }));
+}
+
+function renderExample(ex, host) {
+  const result = window.SchematicMarkdown.renderMarkdownCircuits(ex.markdown, host);
+  logDiagramErrors(host, ex.id);
+  makeZoomable(host, ex.id);
+  if (result.missingLibraries && result.missingLibraries.length) {
+    loadKiCadLibraries(result.missingLibraries).then(() => {
+      window.SchematicMarkdown.renderMarkdownCircuits(ex.markdown, host);
+      makeZoomable(host, ex.id);
+    });
+  }
+}
+
+function buildGallery() {
+  const gallery = document.getElementById("gallery");
+
+  gallery.innerHTML = Object.values(EXAMPLES).map((cat) => {
+    const cards = cat.examples.map((ex) => `
+      <article class="g-card" id="${ex.id}">
+        <div class="g-card-head">
+          <span class="diff-badge ${diffClass(ex.difficulty)}">${ex.difficulty}</span>
+          <span class="g-card-title">${ex.title}</span>
+          <span class="g-card-desc">${ex.desc}</span>
+        </div>
+        <div class="g-card-body" data-ex-id="${ex.id}"></div>
+      </article>`).join("");
+
+    return `<section class="g-section" id="${cat.id}">
+      <div class="g-section-head">
+        <h2>
+          <span class="section-icon" style="background:${cat.iconBg}">${cat.icon}</span>
+          ${cat.title}
+        </h2>
+        <p>${cat.desc}</p>
+      </div>
+      <div class="g-grid">${cards}</div>
+    </section>`;
+  }).join("");
+
+  Object.values(EXAMPLES).forEach((cat) => {
+    cat.examples.forEach((ex) => {
+      const host = gallery.querySelector(`[data-ex-id="${ex.id}"]`);
+      if (host) renderExample(ex, host);
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", buildGallery);
+</script>
+</body>
+</html>

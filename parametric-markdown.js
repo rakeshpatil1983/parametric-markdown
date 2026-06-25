@@ -616,7 +616,7 @@ marker SAMPLE at=7 label="sample"
 
   function extractDiagramBlocks(markdown) {
     const blocks = [];
-    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring|waveform|waveforms)\s*$/gim;
+    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring|waveform|waveforms|sketch|sketch2d|model2d|2d|sketch3d|3d|model3d|solid)\s*$/gim;
     let match;
     while ((match = fenceRe.exec(markdown)) !== null) {
       const startIndex = match.index + match[0].length;
@@ -4083,7 +4083,7 @@ marker SAMPLE at=7 label="sample"
     for (const entries of endpointWires.values()) {
       entries.forEach((entry, index) => {
         const centeredIndex = index - (entries.length - 1) / 2;
-        endpointLanes.set(`${entry.wireIndex}:${entry.side}`, centeredIndex * 8);
+        endpointLanes.set(`${entry.wireIndex}:${entry.side}`, centeredIndex * 18);
       });
     }
     const reservedAreas = [
@@ -4218,10 +4218,10 @@ marker SAMPLE at=7 label="sample"
     const detail = [wireNumber, colorCode, wire.attrs.size, wire.attrs.ferrule].filter(Boolean).join(" | ");
     return `<g class="wiring-wire" data-wire="${escapeHtml(wireNumber)}" data-from="${escapeHtml(wire.from.raw)}" data-to="${escapeHtml(wire.to.raw)}">
       <title>${escapeHtml(`${wire.from.raw} to ${wire.to.raw}${detail ? ` | ${detail}` : ""}`)}</title>
-      <path d="${path}" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path>
-      ${greenYellow ? `<path d="${path}" fill="none" stroke="#eab308" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>` : ""}
-      <path d="${path}" fill="none" stroke="${escapeHtml(color)}" stroke-width="2.4" stroke-dasharray="${greenYellow ? "9 5" : "none"}" stroke-linecap="round" stroke-linejoin="round"></path>
-      <rect x="${labelLeft.toFixed(2)}" y="${labelTop.toFixed(2)}" width="${labelWidth.toFixed(2)}" height="14" rx="2" fill="#fff" stroke="#cbd5e1" stroke-width="0.8"></rect>
+      <path d="${path}" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="miter"></path>
+      ${greenYellow ? `<path d="${path}" fill="none" stroke="#eab308" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="miter"></path>` : ""}
+      <path d="${path}" fill="none" stroke="${escapeHtml(color)}" stroke-width="2" stroke-dasharray="${greenYellow ? "9 5" : "none"}" stroke-linecap="round" stroke-linejoin="miter"></path>
+      <rect x="${labelLeft.toFixed(2)}" y="${labelTop.toFixed(2)}" width="${labelWidth.toFixed(2)}" height="14" rx="2" fill="#fff" stroke="#94a3b8" stroke-width="0.8"></rect>
       <text class="wiring-wire-label" x="${labelGeometry.x.toFixed(2)}" y="${labelGeometry.y.toFixed(2)}" text-anchor="${labelGeometry.anchor}">${escapeHtml(label)}</text>
     </g>`;
   }
@@ -4244,21 +4244,46 @@ marker SAMPLE at=7 label="sample"
       textY = device.render.y + device.render.height - 9;
     }
     return `<g class="wiring-terminal" data-device="${escapeHtml(device.ref)}" data-terminal="${escapeHtml(terminal.id)}">
-      <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="4.2" fill="#fff" stroke="#172033" stroke-width="1.5"></circle>
+      <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5" fill="#fff" stroke="#475569" stroke-width="1.2"></circle>
+      <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="2.4" fill="#334155"></circle>
       <text class="wiring-terminal-label" x="${textX.toFixed(2)}" y="${textY.toFixed(2)}" text-anchor="${anchor}">${escapeHtml(terminal.label)}</text>
     </g>`;
   }
+
+  const WIRING_DEVICE_HEADER_COLORS = {
+    terminal_strip:   "#dbeafe",
+    breaker:          "#fee2e2",
+    breaker_3p:       "#fee2e2",
+    rcd:              "#fce7f3",
+    spd:              "#fef3c7",
+    fuse:             "#ffedd5",
+    contactor:        "#ede9fe",
+    overload:         "#ffedd5",
+    motor:            "#dcfce7",
+    pushbutton_no:    "#dcfce7",
+    pushbutton_nc:    "#f1f5f9",
+    protection_relay: "#fef3c7",
+    power_supply:     "#dbeafe",
+  };
 
   function renderWiringDevice(device) {
     const render = device.render;
     const label = clippedLineText(device.attrs.label || device.rawType.replace(/_/g, " "), 28);
     const typeLabel = clippedLineText(device.type.replace(/_/g, " ").toUpperCase(), 24);
     const terminals = device.terminals.map((terminal) => renderWiringTerminal(terminal, device)).join("\n");
+    const userColor = device.attrs.color;
+    const headerFill = userColor || WIRING_DEVICE_HEADER_COLORS[device.type] || "#f1f5f9";
+    const HEADER_H = 46;
+    const rx = 5;
+    // Clipping path so header stripe is clipped to the rounded-rect shape
+    const clipId = `clip-${escapeHtml(device.ref)}`;
     return `<g class="wiring-device" data-ref="${escapeHtml(device.ref)}" data-type="${escapeHtml(device.type)}" data-box-left="${render.x.toFixed(2)}" data-box-top="${render.y.toFixed(2)}" data-box-right="${(render.x + render.width).toFixed(2)}" data-box-bottom="${(render.y + render.height).toFixed(2)}">
-      <rect x="${render.x.toFixed(2)}" y="${render.y.toFixed(2)}" width="${render.width.toFixed(2)}" height="${render.height.toFixed(2)}" rx="4" fill="#f8fafc" stroke="#334155" stroke-width="1.6"></rect>
-      <line x1="${(render.x + 10).toFixed(2)}" y1="${(render.y + 45).toFixed(2)}" x2="${(render.x + render.width - 10).toFixed(2)}" y2="${(render.y + 45).toFixed(2)}" stroke="#cbd5e1" stroke-width="1"></line>
-      <text class="wiring-device-ref" x="${render.cx.toFixed(2)}" y="${(render.y + 19).toFixed(2)}" text-anchor="middle">${escapeHtml(device.ref)}</text>
-      <text class="wiring-device-label" x="${render.cx.toFixed(2)}" y="${(render.y + 36).toFixed(2)}" text-anchor="middle">${escapeHtml(label)}</text>
+      <defs><clipPath id="${clipId}"><rect x="${render.x.toFixed(2)}" y="${render.y.toFixed(2)}" width="${render.width.toFixed(2)}" height="${render.height.toFixed(2)}" rx="${rx}"></rect></clipPath></defs>
+      <rect x="${render.x.toFixed(2)}" y="${render.y.toFixed(2)}" width="${render.width.toFixed(2)}" height="${render.height.toFixed(2)}" rx="${rx}" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"></rect>
+      <rect x="${render.x.toFixed(2)}" y="${render.y.toFixed(2)}" width="${render.width.toFixed(2)}" height="${HEADER_H}" fill="${escapeHtml(headerFill)}" clip-path="url(#${clipId})"></rect>
+      <line x1="${(render.x + 1).toFixed(2)}" y1="${(render.y + HEADER_H).toFixed(2)}" x2="${(render.x + render.width - 1).toFixed(2)}" y2="${(render.y + HEADER_H).toFixed(2)}" stroke="#cbd5e1" stroke-width="1"></line>
+      <text class="wiring-device-ref" x="${render.cx.toFixed(2)}" y="${(render.y + 17).toFixed(2)}" text-anchor="middle">${escapeHtml(device.ref)}</text>
+      <text class="wiring-device-label" x="${render.cx.toFixed(2)}" y="${(render.y + 34).toFixed(2)}" text-anchor="middle">${escapeHtml(label)}</text>
       <text class="wiring-device-type" x="${render.cx.toFixed(2)}" y="${(render.cy + 7).toFixed(2)}" text-anchor="middle">${escapeHtml(typeLabel)}</text>
       ${terminals}
     </g>`;
@@ -4282,13 +4307,88 @@ marker SAMPLE at=7 label="sample"
     </g>`;
   }
 
+  /* Detect collinear overlapping segments from different wires and nudge them
+     apart perpendicularly so they never visually overlap. Only interior route
+     segments are nudged — terminal connection points stay fixed. */
+  function nudgeCollinearSegments(routedWires) {
+    const NUDGE = 16;
+    // Build a flat list of interior segments (skip first + last of each path)
+    const allSegs = [];
+    routedWires.forEach(({ points }, wi) => {
+      if (!points || points.length < 4) return;
+      for (let si = 1; si <= points.length - 3; si++) {
+        const a = points[si], b = points[si + 1];
+        const isH = Math.abs(a.y - b.y) < 0.5;
+        const isV = Math.abs(a.x - b.x) < 0.5;
+        if (!isH && !isV) continue;
+        allSegs.push({
+          wi, si0: si, si1: si + 1,
+          ori: isH ? "H" : "V",
+          c: isH ? (a.y + b.y) / 2 : (a.x + b.x) / 2,
+          s: isH ? Math.min(a.x, b.x) : Math.min(a.y, b.y),
+          e: isH ? Math.max(a.x, b.x) : Math.max(a.y, b.y),
+        });
+      }
+    });
+
+    const pointDeltaH = new Map(); // wi:ptIdx -> dy
+    const pointDeltaV = new Map(); // wi:ptIdx -> dx
+    const processed = new Set();
+
+    for (let i = 0; i < allSegs.length; i++) {
+      if (processed.has(i)) continue;
+      const sa = allSegs[i];
+      const group = [i];
+      for (let j = i + 1; j < allSegs.length; j++) {
+        const sb = allSegs[j];
+        if (sa.wi === sb.wi) continue;
+        if (sa.ori !== sb.ori) continue;
+        if (Math.abs(sa.c - sb.c) > 1.5) continue;
+        const overlap = Math.min(sa.e, sb.e) - Math.max(sa.s, sb.s);
+        if (overlap > 6) { group.push(j); processed.add(j); }
+      }
+      processed.add(i);
+      if (group.length < 2) continue;
+      const groupSegs = group.map((idx) => allSegs[idx]);
+      groupSegs.sort((a, b) => a.wi - b.wi || a.si0 - b.si0);
+      // Deduplicate by wi+si0 (a wire may appear more than once via different j pairs)
+      const seen = new Set();
+      const unique = groupSegs.filter((seg) => {
+        const k = `${seg.wi}:${seg.si0}`;
+        return seen.has(k) ? false : (seen.add(k), true);
+      });
+      const n = unique.length;
+      unique.forEach((seg, rank) => {
+        const delta = (rank - (n - 1) / 2) * NUDGE;
+        if (Math.abs(delta) < 0.1) return;
+        const map = seg.ori === "H" ? pointDeltaH : pointDeltaV;
+        for (const pi of [seg.si0, seg.si1]) {
+          const k = `${seg.wi}:${pi}`;
+          map.set(k, (map.get(k) || 0) + delta);
+        }
+      });
+    }
+
+    if (pointDeltaH.size === 0 && pointDeltaV.size === 0) return routedWires;
+    return routedWires.map(({ wire, points }, wi) => {
+      if (!points) return { wire, points };
+      const newPoints = points.map((pt, pi) => {
+        const dy = pointDeltaH.get(`${wi}:${pi}`) || 0;
+        const dx = pointDeltaV.get(`${wi}:${pi}`) || 0;
+        return (dx === 0 && dy === 0) ? pt : { x: pt.x + dx, y: pt.y + dy };
+      });
+      return { wire, points: newPoints };
+    });
+  }
+
   function renderWiringDiagramSvg(diagram, options = {}) {
     const layout = layoutWiringDiagram(diagram);
     const routing = createWiringRoutingContext(diagram, layout);
-    const routedWires = diagram.wires.map((wire) => ({
+    const rawRouted = diagram.wires.map((wire) => ({
       wire,
       points: routeWiringWire(wire, diagram, routing)
     }));
+    const routedWires = nudgeCollinearSegments(rawRouted);
     const wires = routedWires.map(({ wire, points }) => (
       renderWiringWire(wire, diagram, routing, points)
     )).join("\n");
@@ -4493,6 +4593,676 @@ marker SAMPLE at=7 label="sample"
     )).join("")}</div>`;
   }
 
+  // ── 2-D Parametric Sketch ───────────────────────────────────────────────
+
+  function isSketchDiagramLanguage(language) {
+    return ["sketch", "model2d", "2d", "sketch2d"].includes(String(language || "").toLowerCase());
+  }
+
+  function sketchNum(v, fallback = 0) {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function sketchCoord(str) {
+    const m = String(str || "").match(/\(\s*([^,)]+)\s*,\s*([^)]+)\s*\)/);
+    return m ? [sketchNum(m[1]), sketchNum(m[2])] : null;
+  }
+
+  function sketchVertices(str) {
+    const pts = [];
+    const re = /\(\s*([^,)]+)\s*,\s*([^)]+)\s*\)/g;
+    let m;
+    while ((m = re.exec(str)) !== null) pts.push([sketchNum(m[1]), sketchNum(m[2])]);
+    return pts;
+  }
+
+  function sketchRange(str) {
+    const m = String(str || "").match(/\[([^\],]+),([^\]]+)\]/);
+    if (!m) return null;
+    const ev = (s) => {
+      try { return Function(`"use strict"; const pi=Math.PI; return (${s.trim().replace(/\bpi\b/g,"Math.PI")});`)(); }
+      catch { return NaN; }
+    };
+    return [ev(m[1]), ev(m[2])];
+  }
+
+  function sketchEvalPolar(expr, t) {
+    try {
+      const safe = expr
+        .replace(/\bpi\b/gi, "Math.PI")
+        .replace(/\bsin\b/g, "Math.sin").replace(/\bcos\b/g, "Math.cos")
+        .replace(/\btan\b/g, "Math.tan").replace(/\bsqrt\b/g, "Math.sqrt")
+        .replace(/\babs\b/g, "Math.abs").replace(/\bexp\b/g, "Math.exp")
+        .replace(/\blog\b/g, "Math.log").replace(/\bpow\b/g, "Math.pow")
+        .replace(/\bfloor\b/g, "Math.floor").replace(/\bceil\b/g, "Math.ceil");
+      return Function("t", `"use strict"; return (${safe});`)(t);
+    } catch { return 0; }
+  }
+
+  function parseSketchDiagram(source, options = {}) {
+    const startLine = options.startLine || 1;
+    const diagnostics = [];
+    const diagram = {
+      title: "Sketch",
+      canvas: { width: 540, height: 420, scale: 3, grid: 20, originX: 270, originY: 210 },
+      datums: [], shapes: [], polars: [], dims: [], diagnostics,
+    };
+
+    for (let i = 0, lines = source.split("\n"); i < lines.length; i++) {
+      const lineNum = startLine + i;
+      const raw = lines[i].replace(/\/\/.*$/, "").trim();
+      if (!raw) continue;
+
+      // extract quoted values so they survive attribute splitting
+      const strs = [];
+      const stripped = raw.replace(/"([^"\\]|\\.)*"/g, (q) => { strs.push(q.slice(1, -1)); return `__S${strs.length - 1}__`; });
+
+      const attrRe = /(\w+)=((?:__S\d+__|"[^"]*"|\[[^\]]*\]|\([^)]*\)|[^\s]+))/g;
+      const rawAttrs = {};
+      let am;
+      while ((am = attrRe.exec(stripped)) !== null) {
+        let v = am[2].replace(/__S(\d+)__/g, (_, j) => strs[j]);
+        rawAttrs[am[1]] = v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
+      }
+
+      const words = stripped.split(/\s+/);
+      const kw = words[0]?.toLowerCase();
+      const N = (k, d = 0) => sketchNum(rawAttrs[k], d);
+      const S = (k, d = "") => rawAttrs[k] || d;
+      const C = (k, d) => sketchCoord(rawAttrs[k]) || d;
+
+      try {
+        if (kw === "title") {
+          const m = raw.match(/title\s+"([^"]+)"/);
+          if (m) diagram.title = m[1];
+        } else if (kw === "canvas") {
+          const w = N("width", 540), h = N("height", 420), s = N("scale", 3), g = N("grid", 20);
+          diagram.canvas = { width: w, height: h, scale: s, grid: g,
+            originX: N("originX", w / 2), originY: N("originY", h / 2) };
+        } else if (kw === "datum") {
+          const sub = words[1]?.toLowerCase();
+          const id = words[2] || `D${diagram.datums.length + 1}`;
+          if (sub === "point") {
+            const at = C("at", [0, 0]);
+            diagram.datums.push({ id, type: "point", x: at[0], y: at[1], label: S("label", id), attrs: rawAttrs });
+          } else if (sub === "axis") {
+            const dir = S("direction", "horizontal").toLowerCase();
+            diagram.datums.push({ id, type: "axis",
+              direction: dir.startsWith("v") ? "vertical" : dir === "angle" ? "angle" : "horizontal",
+              at: N("at", 0), angle: N("angle", 0), label: S("label", id), attrs: rawAttrs });
+          }
+        } else if (["circle", "rect", "rectangle", "square", "triangle", "ellipse", "arc", "line", "polygon"].includes(kw)) {
+          const id = words[1] || `${kw[0].toUpperCase()}${diagram.shapes.length + 1}`;
+          const shape = { id, type: kw === "rect" ? "rectangle" : kw, attrs: rawAttrs };
+          if (kw === "circle") {
+            const c = C("center", [0, 0]);
+            shape.cx = c[0]; shape.cy = c[1];
+            shape.r = N("radius", N("r", 20));
+          } else if (kw === "rectangle" || kw === "rect") {
+            if (rawAttrs.center) {
+              const c = C("center", [0, 0]); const w = N("width", 60), h = N("height", 40);
+              shape.x = c[0] - w / 2; shape.y = c[1] - h / 2; shape.w = w; shape.h = h;
+            } else {
+              const c = C("corner", [0, 0]);
+              shape.x = c[0]; shape.y = c[1]; shape.w = N("width", 60); shape.h = N("height", 40);
+            }
+          } else if (kw === "square") {
+            const sz = N("size", N("side", 50));
+            const c = rawAttrs.center ? C("center", [0, 0]) : C("corner", [0, 0]);
+            shape.x = rawAttrs.center ? c[0] - sz / 2 : c[0];
+            shape.y = rawAttrs.center ? c[1] - sz / 2 : c[1];
+            shape.w = sz; shape.h = sz; shape.type = "rectangle";
+          } else if (kw === "triangle") {
+            if (rawAttrs.vertices) {
+              shape.vertices = sketchVertices(rawAttrs.vertices);
+            } else {
+              const at = C("at", [0, 0]); const b = N("base", 60), h = N("height", N("h", 50));
+              shape.vertices = [[at[0] - b / 2, at[1]], [at[0] + b / 2, at[1]], [at[0], at[1] + h]];
+            }
+          } else if (kw === "ellipse") {
+            const c = C("center", [0, 0]);
+            shape.cx = c[0]; shape.cy = c[1];
+            shape.rx = N("rx", 40); shape.ry = N("ry", 20); shape.rotation = N("rotation", 0);
+          } else if (kw === "arc") {
+            const c = C("center", [0, 0]);
+            shape.cx = c[0]; shape.cy = c[1];
+            shape.r = N("radius", N("r", 30));
+            shape.startAngle = N("start", 0); shape.endAngle = N("end", 90);
+            shape.type = "arc";
+          } else if (kw === "line") {
+            const f = C("from", [0, 0]); const t = C("to", [100, 0]);
+            shape.x1 = f[0]; shape.y1 = f[1]; shape.x2 = t[0]; shape.y2 = t[1];
+          } else if (kw === "polygon") {
+            shape.vertices = sketchVertices(rawAttrs.vertices || "");
+          }
+          diagram.shapes.push(shape);
+        } else if (kw === "polar") {
+          const id = words[1] || `P${diagram.polars.length + 1}`;
+          const eq = S("eq", S("r", "1"));
+          const tRange = sketchRange(rawAttrs.t || rawAttrs.range || rawAttrs.t_range || "[0,6.283185]") || [0, 2 * Math.PI];
+          diagram.polars.push({ id, eq, t_start: tRange[0], t_end: tRange[1], samples: N("samples", 400), attrs: rawAttrs });
+        } else if (kw === "dim") {
+          const sub = words[1]?.toLowerCase();
+          const id = words[2] || `dim${diagram.dims.length + 1}`;
+          const dim = { id, type: sub, attrs: rawAttrs };
+          if (sub === "linear") {
+            const f = C("from", [0, 0]); const t = C("to", [100, 0]);
+            dim.x1 = f[0]; dim.y1 = f[1]; dim.x2 = t[0]; dim.y2 = t[1];
+            dim.offset = N("offset", 20); dim.label = S("label", "");
+          } else if (sub === "radius") {
+            dim.ref = S("ref", ""); dim.label = S("label", "");
+          } else if (sub === "angle") {
+            const c = C("center", [0, 0]);
+            dim.cx = c[0]; dim.cy = c[1]; dim.r = N("r", 28);
+            dim.startAngle = N("start", 0); dim.endAngle = N("end", 90); dim.label = S("label", "");
+          }
+          diagram.dims.push(dim);
+        }
+      } catch (e) {
+        diagnostics.push({ severity: "error", line: lineNum, message: `Sketch: ${e?.message || e}` });
+      }
+    }
+    return diagram;
+  }
+
+  function renderSketchDiagramSvg(diagram, options = {}) {
+    const { canvas, shapes, datums, polars, dims } = diagram;
+    const { scale, grid, originX, originY } = canvas;
+
+    // Math → SVG coordinate helpers (y-axis is up in math, down in SVG)
+    const mx = (x) => originX + x * scale;
+    const my = (y) => originY - y * scale;
+    const mr = (r) => Math.abs(r * scale);
+
+    const shapeAttr = (attrs, defFill = "#dbeafe", defStroke = "#2563eb") => {
+      const fill = attrs.fill || defFill;
+      const stroke = attrs.stroke || defStroke;
+      const sw = attrs.stroke_width || attrs["stroke-width"] || "1.8";
+      const dash = attrs.dashed === "true" ? ` stroke-dasharray="6 3"` : "";
+      const op = attrs.opacity ? ` opacity="${escapeHtml(attrs.opacity)}"` : "";
+      return `fill="${escapeHtml(fill)}" stroke="${escapeHtml(stroke)}" stroke-width="${escapeHtml(sw)}"${dash}${op}`;
+    };
+
+    // ── Pass 1: compute content bounding box in SVG pixels ────────────────
+    const PAD = 36;
+    let bbMinX = Infinity, bbMinY = Infinity, bbMaxX = -Infinity, bbMaxY = -Infinity;
+    const bbAdd = (x, y) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      if (x < bbMinX) bbMinX = x; if (y < bbMinY) bbMinY = y;
+      if (x > bbMaxX) bbMaxX = x; if (y > bbMaxY) bbMaxY = y;
+    };
+
+    bbAdd(mx(0), my(0)); // always include origin
+
+    for (const sh of shapes) {
+      if (sh.type === "circle") {
+        const r = mr(sh.r);
+        bbAdd(mx(sh.cx) - r, my(sh.cy) - r); bbAdd(mx(sh.cx) + r, my(sh.cy) + r);
+      } else if (sh.type === "rectangle") {
+        bbAdd(mx(sh.x), my(sh.y)); bbAdd(mx(sh.x + sh.w), my(sh.y + sh.h));
+        bbAdd(mx(sh.x + sh.w), my(sh.y)); bbAdd(mx(sh.x), my(sh.y + sh.h));
+      } else if (sh.type === "ellipse") {
+        bbAdd(mx(sh.cx) - mr(sh.rx), my(sh.cy) - mr(sh.ry));
+        bbAdd(mx(sh.cx) + mr(sh.rx), my(sh.cy) + mr(sh.ry));
+      } else if (sh.type === "arc") {
+        const r = mr(sh.r);
+        bbAdd(mx(sh.cx) - r, my(sh.cy) - r); bbAdd(mx(sh.cx) + r, my(sh.cy) + r);
+      } else if (sh.type === "line") {
+        bbAdd(mx(sh.x1), my(sh.y1)); bbAdd(mx(sh.x2), my(sh.y2));
+      } else if (sh.type === "triangle" || sh.type === "polygon") {
+        for (const [vx, vy] of sh.vertices || []) bbAdd(mx(vx), my(vy));
+      }
+    }
+
+    for (const p of polars) {
+      const step = (p.t_end - p.t_start) / Math.max(10, p.samples);
+      for (let ti = 0; ti <= p.samples; ti++) {
+        const t = p.t_start + ti * step;
+        const r = sketchEvalPolar(p.eq, t);
+        if (!Number.isFinite(r)) continue;
+        bbAdd(mx(r * Math.cos(t)), my(r * Math.sin(t)));
+      }
+    }
+
+    for (const d of dims) {
+      if (d.type === "linear") {
+        const dx = d.x2 - d.x1, dy = d.y2 - d.y1, len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0.01) {
+          const nx = -dy / len, ny = dx / len, off = d.offset;
+          bbAdd(mx(d.x1 + nx * off), my(d.y1 + ny * off));
+          bbAdd(mx(d.x2 + nx * off), my(d.y2 + ny * off));
+        }
+      }
+    }
+
+    // Fallback if nothing was added
+    if (!Number.isFinite(bbMinX)) { bbMinX = 0; bbMinY = 0; bbMaxX = canvas.width; bbMaxY = canvas.height; }
+
+    // ── Viewport derived from bounding box + padding ───────────────────────
+    const vx = Math.floor(bbMinX - PAD);
+    const vy = Math.floor(bbMinY - PAD);
+    const vw = Math.ceil(bbMaxX - bbMinX + 2 * PAD);
+    const vh = Math.ceil(bbMaxY - bbMinY + 2 * PAD);
+
+    // ── Grid ──────────────────────────────────────────────────────────────
+    const mathL = (vx - originX) / scale, mathR = (vx + vw - originX) / scale;
+    const mathT = (originY - vy) / scale,  mathB = (originY - (vy + vh)) / scale;
+    const gridLines = [];
+    if (grid > 0) {
+      for (let gx = Math.ceil(mathL / grid) * grid; gx <= mathR; gx += grid) {
+        const sx = mx(gx).toFixed(1);
+        gridLines.push(`<line x1="${sx}" y1="${vy}" x2="${sx}" y2="${vy + vh}" stroke="${gx === 0 ? "#94a3b8" : "#e2e8f0"}" stroke-width="${gx === 0 ? 1 : 0.5}"/>`);
+      }
+      for (let gy = mathB; gy <= mathT; gy += grid) {
+        const sy = my(gy).toFixed(1);
+        gridLines.push(`<line x1="${vx}" y1="${sy}" x2="${vx + vw}" y2="${sy}" stroke="${gy === 0 ? "#94a3b8" : "#e2e8f0"}" stroke-width="${gy === 0 ? 1 : 0.5}"/>`);
+      }
+    }
+
+    // ── Datums ────────────────────────────────────────────────────────────
+    const DATUM_COLOR = "#3b82f6";
+    const datumSvg = datums.map((d) => {
+      if (d.type === "point") {
+        const sx = mx(d.x).toFixed(1), sy = my(d.y).toFixed(1);
+        return `<g class="sketch-datum-point" data-id="${escapeHtml(d.id)}">
+          <line x1="${(+sx - 9).toFixed(1)}" y1="${sy}" x2="${(+sx + 9).toFixed(1)}" y2="${sy}" stroke="${DATUM_COLOR}" stroke-width="1.2" stroke-dasharray="3 2"/>
+          <line x1="${sx}" y1="${(+sy - 9).toFixed(1)}" x2="${sx}" y2="${(+sy + 9).toFixed(1)}" stroke="${DATUM_COLOR}" stroke-width="1.2" stroke-dasharray="3 2"/>
+          <circle cx="${sx}" cy="${sy}" r="3" fill="${DATUM_COLOR}"/>
+          <text x="${(+sx + 6).toFixed(1)}" y="${(+sy - 6).toFixed(1)}" font-size="10" fill="${DATUM_COLOR}" font-family="monospace" font-weight="600">${escapeHtml(d.label)}</text>
+        </g>`;
+      }
+      if (d.type === "axis") {
+        if (d.direction === "vertical") {
+          const sx = mx(d.at).toFixed(1);
+          return `<g class="sketch-datum-axis" data-id="${escapeHtml(d.id)}">
+            <line x1="${sx}" y1="${vy}" x2="${sx}" y2="${vy + vh}" stroke="${DATUM_COLOR}" stroke-width="1" stroke-dasharray="10 5" opacity="0.7"/>
+            <text x="${(+sx + 4).toFixed(1)}" y="${(vy + 14).toFixed(1)}" font-size="10" fill="${DATUM_COLOR}" font-family="monospace">${escapeHtml(d.label)}</text>
+          </g>`;
+        }
+        const sy = my(d.at).toFixed(1);
+        return `<g class="sketch-datum-axis" data-id="${escapeHtml(d.id)}">
+          <line x1="${vx}" y1="${sy}" x2="${vx + vw}" y2="${sy}" stroke="${DATUM_COLOR}" stroke-width="1" stroke-dasharray="10 5" opacity="0.7"/>
+          <text x="${(vx + vw - 4).toFixed(1)}" y="${(+sy - 4).toFixed(1)}" font-size="10" fill="${DATUM_COLOR}" font-family="monospace" text-anchor="end">${escapeHtml(d.label)}</text>
+        </g>`;
+      }
+      return "";
+    }).join("\n");
+
+    // ── Shapes ────────────────────────────────────────────────────────────
+    const shapeSvg = shapes.map((sh) => {
+      const a = sh.attrs;
+      const st = shapeAttr(a);
+      const lbl = a.label ? `<text x="${mx(sh.cx ?? sh.x ?? 0).toFixed(1)}" y="${(my(sh.cy ?? sh.y ?? 0) + 4).toFixed(1)}" font-size="11" fill="${escapeHtml(a.stroke || "#2563eb")}" text-anchor="middle" font-family="monospace" font-weight="600">${escapeHtml(a.label)}</text>` : "";
+
+      if (sh.type === "circle") {
+        const cx = mx(sh.cx).toFixed(1), cy = my(sh.cy).toFixed(1), r = mr(sh.r).toFixed(1);
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><circle cx="${cx}" cy="${cy}" r="${r}" ${st}/>${lbl}</g>`;
+      }
+      if (sh.type === "rectangle") {
+        const x = mx(sh.x).toFixed(1), y = my(sh.y + sh.h).toFixed(1);
+        const w = mr(sh.w).toFixed(1), h = mr(sh.h).toFixed(1);
+        const cx = (mx(sh.x) + mr(sh.w) / 2).toFixed(1), cy = (my(sh.y + sh.h) + mr(sh.h) / 2).toFixed(1);
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" ${st}/>${a.label ? `<text x="${cx}" y="${(+cy + 4).toFixed(1)}" font-size="11" fill="${escapeHtml(a.stroke || "#2563eb")}" text-anchor="middle" font-family="monospace" font-weight="600">${escapeHtml(a.label)}</text>` : ""}</g>`;
+      }
+      if (sh.type === "triangle" || sh.type === "polygon") {
+        if (!sh.vertices?.length) return "";
+        const pts = sh.vertices.map(([x, y]) => `${mx(x).toFixed(1)},${my(y).toFixed(1)}`).join(" ");
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><polygon points="${pts}" ${st}/></g>`;
+      }
+      if (sh.type === "ellipse") {
+        const cx = mx(sh.cx).toFixed(1), cy = my(sh.cy).toFixed(1);
+        const rx = mr(sh.rx).toFixed(1), ry = mr(sh.ry).toFixed(1);
+        const rot = sh.rotation ? ` transform="rotate(${-sh.rotation},${cx},${cy})"` : "";
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rot} ${st}/>${lbl}</g>`;
+      }
+      if (sh.type === "arc") {
+        const cx = mx(sh.cx), cy = my(sh.cy), r = mr(sh.r);
+        const a1 = sh.startAngle * Math.PI / 180, a2 = sh.endAngle * Math.PI / 180;
+        const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy - r * Math.sin(a1)).toFixed(1);
+        const x2 = (cx + r * Math.cos(a2)).toFixed(1), y2 = (cy - r * Math.sin(a2)).toFixed(1);
+        const large = Math.abs(sh.endAngle - sh.startAngle) > 180 ? 1 : 0;
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><path d="M ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 ${large} 0 ${x2} ${y2}" fill="none" stroke="${escapeHtml(a.stroke || "#2563eb")}" stroke-width="${a.stroke_width || 1.8}"/></g>`;
+      }
+      if (sh.type === "line") {
+        return `<g class="sketch-shape" data-id="${escapeHtml(sh.id)}"><line x1="${mx(sh.x1).toFixed(1)}" y1="${my(sh.y1).toFixed(1)}" x2="${mx(sh.x2).toFixed(1)}" y2="${my(sh.y2).toFixed(1)}" stroke="${escapeHtml(a.stroke || "#334155")}" stroke-width="${a.stroke_width || 1.8}" fill="none"/></g>`;
+      }
+      return "";
+    }).join("\n");
+
+    // ── Polar curves ─────────────────────────────────────────────────────
+    const polarSvg = polars.map((p) => {
+      const color = p.attrs.stroke || p.attrs.color || "#dc2626";
+      const sw = p.attrs.stroke_width || "2";
+      const pts = [];
+      const step = (p.t_end - p.t_start) / Math.max(10, p.samples);
+      for (let ti = 0; ti <= p.samples; ti++) {
+        const t = p.t_start + ti * step;
+        const r = sketchEvalPolar(p.eq, t);
+        if (!Number.isFinite(r)) continue;
+        pts.push(`${mx(r * Math.cos(t)).toFixed(1)},${my(r * Math.sin(t)).toFixed(1)}`);
+      }
+      if (!pts.length) return "";
+      const d = "M " + pts.join(" L ");
+      return `<g class="sketch-polar" data-id="${escapeHtml(p.id)}">
+        <path d="${d}" fill="none" stroke="${escapeHtml(color)}" stroke-width="${escapeHtml(sw)}" stroke-linecap="round" stroke-linejoin="round"/>
+        ${(p.attrs.label !== "" && (p.attrs.label || p.id)) ? `<text x="${mx(0).toFixed(1)}" y="${(my(0) - 6).toFixed(1)}" font-size="10" fill="${escapeHtml(color)}" font-family="monospace" text-anchor="middle">${escapeHtml(p.attrs.label !== undefined ? p.attrs.label : p.id)}</text>` : ""}
+      </g>`;
+    }).join("\n");
+
+    // ── Dimensions ────────────────────────────────────────────────────────
+    const DIM_COLOR = "#64748b";
+    const dimSvg = dims.map((d) => {
+      if (d.type === "linear") {
+        const dx = d.x2 - d.x1, dy = d.y2 - d.y1;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.01) return "";
+        const nx = -dy / len, ny = dx / len;
+        const off = d.offset;
+        const p1x = mx(d.x1 + nx * off), p1y = my(d.y1 + ny * off);
+        const p2x = mx(d.x2 + nx * off), p2y = my(d.y2 + ny * off);
+        const midX = ((p1x + p2x) / 2).toFixed(1), midY = ((p1y + p2y) / 2 - 6).toFixed(1);
+        const label = d.label || `${len.toFixed(1)}`;
+        const ang = Math.atan2(my(d.y1) - my(d.y2), mx(d.x2) - mx(d.x1)) * 180 / Math.PI;
+        return `<g class="sketch-dim" data-id="${escapeHtml(d.id)}">
+          <line x1="${mx(d.x1).toFixed(1)}" y1="${my(d.y1).toFixed(1)}" x2="${p1x.toFixed(1)}" y2="${p1y.toFixed(1)}" stroke="${DIM_COLOR}" stroke-width="0.8" stroke-dasharray="3 2"/>
+          <line x1="${mx(d.x2).toFixed(1)}" y1="${my(d.y2).toFixed(1)}" x2="${p2x.toFixed(1)}" y2="${p2y.toFixed(1)}" stroke="${DIM_COLOR}" stroke-width="0.8" stroke-dasharray="3 2"/>
+          <line x1="${p1x.toFixed(1)}" y1="${p1y.toFixed(1)}" x2="${p2x.toFixed(1)}" y2="${p2y.toFixed(1)}" stroke="${DIM_COLOR}" stroke-width="1" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+          <text x="${midX}" y="${midY}" font-size="10" fill="${DIM_COLOR}" text-anchor="middle" font-family="monospace" transform="rotate(${(-ang).toFixed(1)},${midX},${midY})">${escapeHtml(label)}</text>
+        </g>`;
+      }
+      if (d.type === "radius") {
+        const ref = shapes.find((s) => s.id === d.ref);
+        if (!ref || ref.type !== "circle") return "";
+        const cx = mx(ref.cx), cy = my(ref.cy), r = mr(ref.r);
+        const ex = cx + r * 0.707, ey = cy - r * 0.707;
+        const label = d.label || `R${ref.r}`;
+        return `<g class="sketch-dim" data-id="${escapeHtml(d.id)}">
+          <line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${DIM_COLOR}" stroke-width="1" marker-end="url(#dimArrow)"/>
+          <text x="${(ex + 6).toFixed(1)}" y="${(ey - 4).toFixed(1)}" font-size="10" fill="${DIM_COLOR}" font-family="monospace">${escapeHtml(label)}</text>
+        </g>`;
+      }
+      if (d.type === "angle") {
+        const cx = mx(d.cx), cy = my(d.cy), r = mr(d.r);
+        const a1 = d.startAngle * Math.PI / 180, a2 = d.endAngle * Math.PI / 180;
+        const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy - r * Math.sin(a1)).toFixed(1);
+        const x2 = (cx + r * Math.cos(a2)).toFixed(1), y2 = (cy - r * Math.sin(a2)).toFixed(1);
+        const large = Math.abs(d.endAngle - d.startAngle) > 180 ? 1 : 0;
+        const midA = (a1 + a2) / 2;
+        const lx = (cx + (r + 14) * Math.cos(midA)).toFixed(1), ly = (cy - (r + 14) * Math.sin(midA)).toFixed(1);
+        const label = d.label || `${Math.abs(d.endAngle - d.startAngle).toFixed(0)}°`;
+        return `<g class="sketch-dim" data-id="${escapeHtml(d.id)}">
+          <path d="M ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 ${large} 0 ${x2} ${y2}" fill="none" stroke="${DIM_COLOR}" stroke-width="1"/>
+          <text x="${lx}" y="${ly}" font-size="10" fill="${DIM_COLOR}" text-anchor="middle" font-family="monospace">${escapeHtml(label)}</text>
+        </g>`;
+      }
+      return "";
+    }).join("\n");
+
+    const diagramTitle = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    return `<svg class="diagram-svg sketch-diagram-svg" data-diagram-kind="sketch" xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" style="width:100%;display:block" role="img">
+      ${diagramTitle}
+      <defs>
+        <marker id="dimArrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M 0 0 L 6 3 L 0 6 Z" fill="${DIM_COLOR}"/>
+        </marker>
+      </defs>
+      <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="#fafafa"/>
+      <g class="sketch-grid">${gridLines.join("")}</g>
+      <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="none" stroke="#cbd5e1" stroke-width="1"/>
+      <g class="sketch-datums">${datumSvg}</g>
+      <g class="sketch-shapes">${shapeSvg}</g>
+      <g class="sketch-polars">${polarSvg}</g>
+      <g class="sketch-dims">${dimSvg}</g>
+      <text x="${(vx + 8).toFixed(1)}" y="${(vy + vh - 6).toFixed(1)}" font-size="9" fill="#94a3b8" font-family="monospace">${escapeHtml(diagram.title)}</text>
+    </svg>`;
+  }
+
+  // ── 3-D Parametric Sketch ───────────────────────────────────────────────
+
+  function isSketch3dDiagramLanguage(lang) {
+    return ["sketch3d", "3d", "model3d", "solid"].includes(String(lang || "").toLowerCase());
+  }
+
+  function parseSketch3dDiagram(source, options = {}) {
+    const startLine = options.startLine || 1;
+    const diag = [];
+    const diagram = {
+      title: "3D Sketch",
+      canvas: { width: 800, height: 360 },
+      view: { rx: 0.436, ry: -0.610, zoom: 1.4, panX: 0, panY: 0 },
+      datumPlanes: [],
+      datumAxes: [],
+      features: [],
+      diagnostics: diag,
+    };
+    for (let i = 0, lines = source.split("\n"); i < lines.length; i++) {
+      const lineNum = startLine + i;
+      const raw = lines[i].replace(/\/\/.*$/, "").trim();
+      if (!raw) continue;
+      const strs = [];
+      const stripped = raw.replace(/"([^"\\]|\\.)*"/g, (q) => { strs.push(q.slice(1,-1)); return `__S${strs.length-1}__`; });
+      const attrRe = /(\w+)=((?:__S\d+__|"[^"]*"|\[[^\]]*\]|\([^)]*\)|z\([^)]*\)|[^\s,]+))/g;
+      const attrs = {};
+      let m;
+      while ((m = attrRe.exec(stripped)) !== null) {
+        const v = m[2].replace(/__S(\d+)__/g, (_, j) => strs[+j]);
+        attrs[m[1]] = v.startsWith('"') && v.endsWith('"') ? v.slice(1,-1) : v;
+      }
+      const Nv = (k, d = 0) => { const n = parseFloat(attrs[k]); return Number.isFinite(n) ? n : d; };
+      const Sv = (k, d = "") => attrs[k] != null ? String(attrs[k]) : d;
+      const words = stripped.split(/\s+/);
+      const kw = words[0]?.toLowerCase();
+      try {
+        if (kw === "title") {
+          const tm = raw.match(/title\s+"([^"]+)"/); if (tm) diagram.title = tm[1];
+        } else if (kw === "canvas") {
+          diagram.canvas.width = Nv("width", 800); diagram.canvas.height = Nv("height", 360);
+        } else if (kw === "view") {
+          diagram.view = { rx: Nv("rotX", 25) * Math.PI/180, ry: Nv("rotY",-35) * Math.PI/180, zoom: Nv("zoom",1.4), panX: 0, panY: 0 };
+        } else if (kw === "datum" && words[1]?.toLowerCase() === "plane") {
+          const id = (words[2] || "XY").toUpperCase();
+          diagram.datumPlanes.push({ id, normal: id==="XZ"?"XZ":id==="YZ"?"YZ":"XY", at: Nv("at",0), label: Sv("label",id) });
+        } else if (kw === "datum" && words[1]?.toLowerCase() === "axis") {
+          const id = (words[2] || "X").toUpperCase();
+          diagram.datumAxes.push({ id, label: Sv("label", id) });
+        } else if (kw === "pad" || kw === "pocket") {
+          const id = words[1] || `F${diagram.features.length+1}`;
+          const prof = Sv("profile","rect").toLowerCase();
+          const planeStr = Sv("plane","z(0)");
+          const zm = planeStr.match(/z\(([^)]+)\)/);
+          const planeZ = zm ? parseFloat(zm[1]) : Nv("at", 0);
+          const depth = Math.abs(Nv("depth", 20));
+          const z0 = planeZ, z1 = planeZ + depth * (Sv("direction","")==="-Z"?-1:1);
+          const center = sketchCoord(attrs.center) || [0,0];
+          const feat = { id, op: kw, prof, cx: center[0], cy: center[1], z0: Math.min(z0,z1), z1: Math.max(z0,z1), color: Sv("color", kw==="pad"?"#3b82f6":"#1e3a5f") };
+          if (prof === "circle") { feat.r = Nv("radius",20); feat.sides = Math.max(8, Math.round(Nv("sides",32))); }
+          else if (prof === "gear") { feat.teeth = Math.max(4, Math.round(Nv("teeth",20))); feat.module = Math.max(0.5, Nv("module",2)); }
+          else { feat.w = Nv("width", Nv("size",60)); feat.h = Nv("height", feat.w); }
+          diagram.features.push(feat);
+        }
+      } catch (e) {
+        diag.push({ severity: "error", line: lineNum, message: `3D parse: ${e?.message||e}` });
+      }
+    }
+    return diagram;
+  }
+
+  function s3dBuildGeometry(diagram) {
+    const AXLEN = 55, PSZ = 70;
+    const faces = [], axes = [];
+    const r2 = (v) => Math.round(v * 100) / 100; // round to 2dp to keep JSON small
+    for (const dp of diagram.datumPlanes) {
+      const S = PSZ, at = dp.at;
+      let v;
+      if (dp.normal==="XZ") v=[[-S,at,-S],[S,at,-S],[S,at,S],[-S,at,S]];
+      else if (dp.normal==="YZ") v=[[at,-S,-S],[at,S,-S],[at,S,S],[at,-S,S]];
+      else v=[[-S,-S,at],[S,-S,at],[S,S,at],[-S,S,at]];
+      faces.push({v,c:"#3b82f6",a:0.07,ns:true});
+      faces.push({v:[...v].reverse(),c:"#3b82f6",a:0.07,ns:true});
+    }
+    const ACOL = {X:"#dc2626",Y:"#16a34a",Z:"#2563eb"};
+    for (const da of diagram.datumAxes) {
+      const c = ACOL[da.id] || "#94a3b8";
+      const to = da.id==="Y"?[0,AXLEN,0]:da.id==="Z"?[0,0,AXLEN]:[AXLEN,0,0];
+      axes.push({from:[0,0,0],to,c,label:da.label});
+    }
+    for (const feat of diagram.features) {
+      const ip = feat.op==="pocket";
+      const {cx,cy,z0,z1,color} = feat;
+      const wc = ip ? "#0f172a" : color;
+      const wa = ip ? 0.72 : 1.0;
+      if (feat.prof==="circle" || feat.prof==="gear") {
+        let pts;
+        if (feat.prof==="gear") {
+          const T=feat.teeth, M=feat.module;
+          const rp=T*M/2, ra=rp+M, rf=Math.max(rp-1.25*M, M*0.4);
+          pts=[];
+          for(let i=0;i<T;i++){
+            const base=2*Math.PI*i/T, hw_r=0.45*Math.PI/T, hw_t=0.28*Math.PI/T;
+            pts.push([r2(cx+rf*Math.cos(base-hw_r)),r2(cy+rf*Math.sin(base-hw_r))]);
+            pts.push([r2(cx+ra*Math.cos(base-hw_t)),r2(cy+ra*Math.sin(base-hw_t))]);
+            pts.push([r2(cx+ra*Math.cos(base+hw_t)),r2(cy+ra*Math.sin(base+hw_t))]);
+            pts.push([r2(cx+rf*Math.cos(base+hw_r)),r2(cy+rf*Math.sin(base+hw_r))]);
+          }
+        } else {
+          const N = Math.min(feat.sides||24, 24);
+          pts = Array.from({length:N}, (_,i) => {
+            const a = 2*Math.PI*i/N;
+            return [r2(cx+feat.r*Math.cos(a)), r2(cy+feat.r*Math.sin(a))];
+          });
+        }
+        const NP=pts.length;
+        if (!ip) {
+          faces.push({v:pts.map(([x,y])=>[x,y,z1]),c:color,a:1});
+          faces.push({v:[...pts].reverse().map(([x,y])=>[x,y,z0]),c:color,a:1});
+        } else {
+          faces.push({v:pts.map(([x,y])=>[x,y,z0]),c:"#000814",a:0.9});
+        }
+        for (let i=0;i<NP;i++){const[x0,y0]=pts[i],[x1,y1]=pts[(i+1)%NP];faces.push({v:[[x0,y0,z0],[x1,y1,z0],[x1,y1,z1],[x0,y0,z1]],c:wc,a:wa});}
+      } else {
+        const hx=r2(feat.w/2), hy=r2(feat.h/2);
+        const V=(dx,dy,dz)=>[cx+dx,cy+dy,dz];
+        if (!ip) {
+          faces.push({v:[V(-hx,-hy,z1),V(hx,-hy,z1),V(hx,hy,z1),V(-hx,hy,z1)],c:color,a:1});
+          faces.push({v:[V(-hx,-hy,z0),V(-hx,hy,z0),V(hx,hy,z0),V(hx,-hy,z0)],c:color,a:1});
+        } else {
+          faces.push({v:[V(-hx,-hy,z0),V(hx,-hy,z0),V(hx,hy,z0),V(-hx,hy,z0)],c:"#000814",a:0.9});
+        }
+        faces.push({v:[V(-hx,-hy,z0),V(hx,-hy,z0),V(hx,-hy,z1),V(-hx,-hy,z1)],c:wc,a:wa});
+        faces.push({v:[V(hx,hy,z0),V(-hx,hy,z0),V(-hx,hy,z1),V(hx,hy,z1)],c:wc,a:wa});
+        faces.push({v:[V(hx,-hy,z0),V(hx,hy,z0),V(hx,hy,z1),V(hx,-hy,z1)],c:wc,a:wa});
+        faces.push({v:[V(-hx,hy,z0),V(-hx,-hy,z0),V(-hx,-hy,z1),V(-hx,hy,z1)],c:wc,a:wa});
+      }
+    }
+    return {faces,axes};
+  }
+
+  function renderSketch3dDiagramHtml(diagram, options = {}) {
+    const geo = s3dBuildGeometry(diagram);
+    const scene = { title: diagram.title, w: diagram.canvas.width, h: diagram.canvas.height, view: diagram.view, faces: geo.faces, axes: geo.axes };
+    return `<div class="sketch3d-viewport-host" data-scene="${escapeHtml(JSON.stringify(scene))}" style="width:100%;height:100%;position:relative">
+      <canvas class="sketch3d-canvas" width="${diagram.canvas.width}" height="${diagram.canvas.height}" style="width:100%;display:block;cursor:grab" title="Drag to orbit · Shift+drag to pan · Scroll to zoom · Right-click resets"></canvas>
+      <div style="position:absolute;bottom:8px;right:10px;z-index:2">
+        <button class="sketch3d-reset button-secondary" style="padding:2px 9px;font-size:11px" title="Reset view">↺</button>
+      </div>
+    </div>`;
+  }
+
+  function initSketch3dViewers(root) {
+    const hosts = (root||document).querySelectorAll(".sketch3d-viewport-host:not([data-s3d-init])");
+    hosts.forEach((host) => {
+      host.setAttribute("data-s3d-init","1");
+      const canvas = host.querySelector("canvas");
+      if (!canvas) return;
+      let scene; try { scene=JSON.parse(host.dataset.scene); } catch { return; }
+      const W=canvas.width, H=canvas.height;
+      let rx=scene.view.rx, ry=scene.view.ry;
+      let panX=0, panY=0, zoom=1, drag=null;
+
+      // Fit all geometry to 82% of canvas at current rx/ry
+      const s3dFit = () => {
+        const rot2=([x,y,z])=>{const x1=x*Math.cos(ry)+z*Math.sin(ry),z1=-x*Math.sin(ry)+z*Math.cos(ry);return[x1,y*Math.cos(rx)-z1*Math.sin(rx)];};
+        let mnX=1e9,mxX=-1e9,mnY=1e9,mxY=-1e9;
+        const ext=([sx,sy])=>{if(sx<mnX)mnX=sx;if(sx>mxX)mxX=sx;if(sy<mnY)mnY=sy;if(sy>mxY)mxY=sy;};
+        for(const f of scene.faces)for(const v of f.v)ext(rot2(v));
+        for(const a of scene.axes)for(const v of[a.from,a.to])ext(rot2(v));
+        if(!isFinite(mnX))return{zoom:Math.min(W,H)*0.5,panX:0,panY:0};
+        const rX=Math.max(mxX-mnX,1),rY=Math.max(mxY-mnY,1);
+        const z=Math.min(W*0.82/rX,H*0.82/rY);
+        return{zoom:z,panX:-((mnX+mxX)/2)*z,panY:((mnY+mxY)/2)*z};
+      };
+      ({zoom,panX,panY}=s3dFit());
+      const hexRgb = (hex) => {
+        const m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)||/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
+        if (!m) return [100,150,220];
+        return m[1].length===2?[parseInt(m[1],16),parseInt(m[2],16),parseInt(m[3],16)]:[parseInt(m[1]+m[1],16),parseInt(m[2]+m[2],16),parseInt(m[3]+m[3],16)];
+      };
+      const rgba=(hex,b,a)=>{const[r,g,c]=hexRgb(hex);return`rgba(${~~(r*b)},${~~(g*b)},${~~(c*b)},${a})`;};
+      function render() {
+        const ctx=canvas.getContext("2d");
+        const cx=W/2+panX, cy=H/2+panY, PERSP=Math.max(W,H)*1.6;
+        ctx.clearRect(0,0,W,H); ctx.fillStyle="#f8fafc"; ctx.fillRect(0,0,W,H);
+        const rot=([x,y,z])=>{
+          const x1=x*Math.cos(ry)+z*Math.sin(ry),z1=-x*Math.sin(ry)+z*Math.cos(ry);
+          return[x1,y*Math.cos(rx)-z1*Math.sin(rx),y*Math.sin(rx)+z1*Math.cos(rx)];
+        };
+        const prj=([x,y,z])=>{const w=1+z/PERSP;return[cx+x*zoom/w,cy-y*zoom/w];};
+        const LD=[0.408,0.816,0.408];
+        const faceN=(verts)=>{
+          const rv=verts.slice(0,3).map(rot);
+          const e1=[rv[1][0]-rv[0][0],rv[1][1]-rv[0][1],rv[1][2]-rv[0][2]];
+          const e2=[rv[2][0]-rv[0][0],rv[2][1]-rv[0][1],rv[2][2]-rv[0][2]];
+          return[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];
+        };
+        const dotL=(n)=>{const m=Math.sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2]);return m<1e-7?0.5:Math.max(0,(n[0]*LD[0]+n[1]*LD[1]+n[2]*LD[2])/m);};
+        const sorted=scene.faces.map((face)=>{const rv=face.v.map(rot);return{face,rv,z:rv.reduce((s,v)=>s+v[2],0)/rv.length};}).sort((a,b)=>a.z-b.z);
+        for (const{face,rv}of sorted) {
+          const pts=rv.map(v=>prj(v)); if(pts.length<3)continue;
+          ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+          for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+          ctx.closePath();
+          const a=face.a??1;
+          if(!face.ns){const n=faceN(face.v),b=0.22+0.78*dotL(n);ctx.fillStyle=rgba(face.c,b,a);ctx.strokeStyle=rgba(face.c,b*0.5,Math.min(1,a+0.2));}
+          else{const[r,g,c]=hexRgb(face.c);ctx.fillStyle=`rgba(${r},${g},${c},${a})`;ctx.strokeStyle=`rgba(${r},${g},${c},${Math.min(1,a*4)})`;}
+          ctx.lineWidth=0.7; ctx.fill(); ctx.stroke();
+        }
+        for (const ax of scene.axes) {
+          const p0=prj(rot(ax.from)),p1=prj(rot(ax.to));
+          ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);
+          ctx.strokeStyle=ax.c;ctx.lineWidth=1.9;ctx.stroke();
+          if(ax.label){ctx.fillStyle=ax.c;ctx.font="bold 11px monospace";ctx.fillText(ax.label,p1[0]+4,p1[1]+4);}
+        }
+        ctx.strokeStyle="#cbd5e1";ctx.lineWidth=1;ctx.strokeRect(0.5,0.5,W-1,H-1);
+        ctx.fillStyle="#94a3b8";ctx.font="9px monospace";ctx.fillText(scene.title,8,H-6);
+      }
+      render();
+      const resetBtn=host.querySelector(".sketch3d-reset");
+      if(resetBtn) resetBtn.addEventListener("click",()=>{rx=scene.view.rx;ry=scene.view.ry;({zoom,panX,panY}=s3dFit());render();});
+
+      // Use pointer events + setPointerCapture for reliable cross-browser drag
+      canvas.addEventListener("pointerdown",(e)=>{
+        drag={x:e.clientX,y:e.clientY,rx,ry,panX,panY,btn:e.button};
+        canvas.setPointerCapture(e.pointerId);
+        canvas.style.cursor="grabbing";
+        e.preventDefault();
+      });
+      canvas.addEventListener("pointermove",(e)=>{
+        if(!drag)return;
+        const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+        if(drag.btn===2||e.shiftKey){panX=drag.panX+dx;panY=drag.panY+dy;}
+        else{ry=drag.ry+dx*0.009;rx=drag.rx-dy*0.009;}
+        render();
+      });
+      canvas.addEventListener("pointerup",()=>{drag=null;canvas.style.cursor="grab";});
+      canvas.addEventListener("pointercancel",()=>{drag=null;canvas.style.cursor="grab";});
+      canvas.addEventListener("wheel",(e)=>{zoom*=e.deltaY>0?0.91:1.10;render();e.preventDefault();},{passive:false});
+      canvas.addEventListener("contextmenu",(e)=>e.preventDefault());
+    });
+  }
+
+  // ── Language detectors ───────────────────────────────────────────────────
+
   function isLineDiagramLanguage(language) {
     return ["line", "line-diagram", "singleline", "single-line", "one-line"].includes(String(language || "").toLowerCase());
   }
@@ -4508,23 +5278,34 @@ marker SAMPLE at=7 label="sample"
   function renderMarkdownCircuits(markdown, container) {
     const blocks = extractDiagramBlocks(markdown);
     if (!blocks.length) {
-      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, wiring, or waveform code block to render a diagram.</div>`;
+      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, wiring, waveform, or sketch code block to render a diagram.</div>`;
       return { blockCount: 0, diagnosticCount: 0, missingLibraries: [] };
     }
 
     const diagrams = blocks.map((block) => {
-      if (isLineDiagramLanguage(block.language)) {
-        return { kind: "line", model: parseLineDiagram(block.source, { startLine: block.startLine }) };
+      try {
+        if (isLineDiagramLanguage(block.language)) {
+          return { kind: "line", model: parseLineDiagram(block.source, { startLine: block.startLine }) };
+        }
+        if (isWiringDiagramLanguage(block.language)) {
+          return { kind: "wiring", model: parseWiringDiagram(block.source, { startLine: block.startLine }) };
+        }
+        if (isWaveformDiagramLanguage(block.language)) {
+          return { kind: "waveform", model: parseWaveformDiagram(block.source, { startLine: block.startLine }) };
+        }
+        if (isSketchDiagramLanguage(block.language)) {
+          return { kind: "sketch", model: parseSketchDiagram(block.source, { startLine: block.startLine }) };
+        }
+        if (isSketch3dDiagramLanguage(block.language)) {
+          return { kind: "sketch3d", model: parseSketch3dDiagram(block.source, { startLine: block.startLine }) };
+        }
+        const circuit = parseCircuit(block.source, { startLine: block.startLine });
+        validateCircuit(circuit);
+        return { kind: "circuit", model: circuit };
+      } catch (err) {
+        console.error("Parse error:", err);
+        return { kind: "circuit", model: { components: [], connections: [], labels: [], groups: [], diagnostics: [{ severity: "error", line: block.startLine, message: `Internal parse error: ${err?.message || err}` }], librariesToLoad: [] } };
       }
-      if (isWiringDiagramLanguage(block.language)) {
-        return { kind: "wiring", model: parseWiringDiagram(block.source, { startLine: block.startLine }) };
-      }
-      if (isWaveformDiagramLanguage(block.language)) {
-        return { kind: "waveform", model: parseWaveformDiagram(block.source, { startLine: block.startLine }) };
-      }
-      const circuit = parseCircuit(block.source, { startLine: block.startLine });
-      validateCircuit(circuit);
-      return { kind: "circuit", model: circuit };
     });
     validateGlobalLabels(diagrams.filter((entry) => entry.kind === "circuit").map((entry) => entry.model));
 
@@ -4533,13 +5314,23 @@ marker SAMPLE at=7 label="sample"
     container.innerHTML = blocks.map((block, index) => {
       const entry = diagrams[index];
       const model = entry.model;
-      const svg = entry.kind === "line"
-        ? renderLineDiagramSvg(model, { title: `Electrical line diagram block ${index + 1}` })
-        : entry.kind === "wiring"
-          ? renderWiringDiagramSvg(model, { title: `Panel wiring diagram block ${index + 1}` })
-          : entry.kind === "waveform"
-            ? renderWaveformDiagramSvg(model, { title: `Educational waveform block ${index + 1}` })
-            : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
+      let svg;
+      try {
+        svg = entry.kind === "line"
+          ? renderLineDiagramSvg(model, { title: `Electrical line diagram block ${index + 1}` })
+          : entry.kind === "wiring"
+            ? renderWiringDiagramSvg(model, { title: `Panel wiring diagram block ${index + 1}` })
+            : entry.kind === "waveform"
+              ? renderWaveformDiagramSvg(model, { title: `Educational waveform block ${index + 1}` })
+              : entry.kind === "sketch"
+                ? renderSketchDiagramSvg(model, { title: `Parametric sketch block ${index + 1}` })
+                : entry.kind === "sketch3d"
+                  ? renderSketch3dDiagramHtml(model, { title: `3D sketch block ${index + 1}` })
+                  : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
+      } catch (err) {
+        console.error(`Render error in block ${index + 1}:`, err);
+        svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 72" style="width:100%;display:block"><rect width="520" height="72" rx="4" fill="#fff1f2"/><text x="16" y="26" font-family="system-ui,sans-serif" font-size="13" fill="#b42318" font-weight="600">Render error in block ${index + 1}</text><text x="16" y="48" font-family="system-ui,sans-serif" font-size="11" fill="#991b1b">${escapeHtml(String(err?.message || err))}</text></svg>`;
+      }
       diagnosticCount += model.diagnostics.length;
       if (entry.kind === "circuit") {
         for (const libraryName of model.librariesToLoad || []) missingLibraries.add(libraryName);
@@ -4551,23 +5342,30 @@ marker SAMPLE at=7 label="sample"
           ? `${model.devices.length} devices, ${model.wires.length} physical wires`
           : entry.kind === "waveform"
             ? `${model.signals.length} signals, ${model.markers.length} time markers`
-            : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
+            : entry.kind === "sketch"
+              ? `${model.shapes.length} shapes, ${model.polars.length} polar curves, ${model.datums.length} datums`
+              : entry.kind === "sketch3d"
+                ? `${model.features.length} features, ${model.datumPlanes.length} datum planes, ${model.datumAxes.length} axes`
+                : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
       const kindLabel = entry.kind === "line" ? "electrical line"
         : entry.kind === "wiring" ? "panel wiring"
           : entry.kind === "waveform" ? "educational waveform"
-            : "electronic schematic";
+            : entry.kind === "sketch" ? "parametric sketch"
+              : entry.kind === "sketch3d" ? "3D parametric sketch"
+                : "electronic schematic";
       return `<article class="diagram-card">
         <div class="diagram-header">
           <span>${kindLabel} block ${index + 1}</span>
           <div class="diagram-meta">
             <span>${meta}${errorCount ? ` <strong class="diagram-error-badge">${errorCount} error${errorCount === 1 ? "" : "s"}</strong>` : ""}</span>
-            <button class="button-secondary download-svg" type="button" data-download-svg="${index + 1}" data-diagram-kind="${entry.kind}" aria-label="Download ${kindLabel} block ${index + 1} as SVG">Download SVG</button>
+            ${entry.kind !== "sketch3d" ? `<button class="button-secondary download-svg" type="button" data-download-svg="${index + 1}" data-diagram-kind="${entry.kind}" aria-label="Download ${kindLabel} block ${index + 1} as SVG">Download SVG</button>` : ""}
           </div>
         </div>
         <div class="diagram-canvas">${svg}</div>
         ${renderDiagnostics(model.diagnostics)}
       </article>`;
     }).join("");
+    initSketch3dViewers(container);
     return { blockCount: blocks.length, diagnosticCount, missingLibraries: [...missingLibraries] };
   }
 
@@ -4616,9 +5414,15 @@ marker SAMPLE at=7 label="sample"
     editor.value = window.localStorage.getItem(STORAGE_KEY) || DEFAULT_MARKDOWN;
     let renderId = 0;
 
+    const MAX_INPUT_BYTES = 250_000;
     const render = () => {
       renderId += 1;
       const currentRenderId = renderId;
+      if (editor.value.length > MAX_INPUT_BYTES) {
+        renderStatus.textContent = `Input too large (${Math.round(editor.value.length / 1024)} KB). Keep under ${MAX_INPUT_BYTES / 1024} KB to render.`;
+        preview.innerHTML = `<div class="empty-state">Input exceeds ${MAX_INPUT_BYTES / 1024} KB — trim your Markdown to render diagrams.</div>`;
+        return;
+      }
       const result = renderMarkdownCircuits(editor.value, preview);
       window.localStorage.setItem(STORAGE_KEY, editor.value);
       renderStatus.textContent = `${result.blockCount} block${result.blockCount === 1 ? "" : "s"}, ${result.diagnosticCount} diagnostic${result.diagnosticCount === 1 ? "" : "s"}`;
@@ -4679,6 +5483,11 @@ marker SAMPLE at=7 label="sample"
     renderLineDiagramSvg,
     renderWiringDiagramSvg,
     renderWaveformDiagramSvg,
+    parseSketchDiagram,
+    renderSketchDiagramSvg,
+    parseSketch3dDiagram,
+    renderSketch3dDiagramHtml,
+    initSketch3dViewers,
     renderMarkdownCircuits,
     serializeSvg
   };
