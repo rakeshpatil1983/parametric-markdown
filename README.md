@@ -6,7 +6,7 @@ Created by **Rakesh Patil**.
 
 Parametric Markdown is an early-stage, text-first design language and browser renderer for creating technical designs from readable Markdown-like source. The long-term goal is one deterministic language that humans and LLMs can write, review, version, validate, and exchange with established engineering tools.
 
-The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, and **idealized educational waveforms**. PCB design and parametric 3D CAD remain planned work.
+The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, **idealized educational waveforms**, **2-D parametric CAD sketches**, and **interactive 3-D solid modelling**. PCB design and CAD export remain planned work.
 
 ## Why Parametric Markdown?
 
@@ -33,13 +33,14 @@ Parametric Markdown is a prototype. The current browser application includes:
 - Separate power feeders, relay control commands, and equipment-status feedback.
 - Physical panel-wiring blocks with terminal IDs, wire numbers, colors, sizes, automatic routing, and sticker-style SVG output.
 - Educational waveform sheets with ideal sine, PWM, triangle, sawtooth, pulse, step, DC, and exponential traces.
+- 2-D parametric CAD sketches with circles, rectangles, triangles, ellipses, arcs, polygons, polar curves, and linear/radius/angle dimensions.
+- Interactive 3-D solid modelling on an HTML canvas: pad and pocket operations with rect, circle, and spur-gear profiles; datum planes and axes; mouse orbit, pan, and zoom with auto-fit.
 - SVG and Markdown downloads.
 
 Not implemented yet:
 
 - KiCad schematic or PCB export.
 - PCB footprints, placement, routing, layers, zones, and design rules.
-- Parametric 2D sketches or 3D solid modeling.
 - FreeCAD, STEP, or other mechanical CAD export.
 - SPICE simulation or circuit-derived waveform calculation.
 
@@ -169,6 +170,53 @@ marker SWITCH at=2 label="switch closes"
 
 Waveform blocks are deliberately explanatory. They align idealized signal shapes and events for teaching, but do not simulate the surrounding circuit.
 
+### 2-D Parametric Sketch
+
+````markdown
+```sketch
+title "Mounting Plate"
+canvas width=540 height=380 scale=2.8 grid=10 originX=270 originY=190
+
+datum point O at=(0,0) label="O"
+datum axis X direction=horizontal at=0 label="X"
+datum axis Y direction=vertical at=0 label="Y"
+
+rect  PLATE center=(0,0) width=160 height=90 fill=#e0f2fe stroke=#0369a1 stroke_width=2
+circle HOLE1 center=(-60,25)  radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H1"
+circle HOLE2 center=(60,25)   radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8 label="H2"
+circle HOLE3 center=(-60,-25) radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8
+circle HOLE4 center=(60,-25)  radius=10 fill=#fff stroke=#dc2626 stroke_width=1.8
+
+dim linear DW from=(-80,0) to=(80,0) offset=-56 label="160 mm"
+dim linear DH from=(0,-45) to=(0,45) offset=98  label="90 mm"
+dim radius DR ref=HOLE1 label="R10"
+```
+````
+
+Sketch blocks use a math coordinate system (Y-axis up). Shapes, polar curves, and dimensions are all first-class elements. Polar curves accept arbitrary `r(t)` expressions for involute profiles, roses, spirals, and cardioids.
+
+### 3-D Parametric Sketch
+
+````markdown
+```sketch3d
+title "Base Plate with Boss"
+canvas width=800 height=360
+view rotX=22 rotY=-42 zoom=1.2
+
+datum plane XY
+datum axis X
+datum axis Y
+datum axis Z
+
+pad  BASE  profile=rect   center=(0,0)  width=120 height=80 plane=z(0)  depth=20 color=#3b82f6
+pad  BOSS  profile=circle center=(0,0)  radius=26           plane=z(20) depth=16 color=#22c55e
+pad  GEAR1 profile=gear   center=(60,0) teeth=20 module=3   plane=z(20) depth=14 color=#f59e0b
+pocket HOLE profile=circle center=(42,28) radius=9          plane=z(20) depth=20
+```
+````
+
+3-D sketch blocks render an interactive canvas. Drag to orbit, Shift+drag to pan, scroll to zoom. The `gear` profile generates involute-approximated spur teeth from `teeth=` and `module=`; meshing gears need center distance = `(T1+T2)×module/2`.
+
 ## Roadmap
 
 The roadmap is directional. Future syntax will be designed and validated before it is documented as part of the language.
@@ -217,10 +265,18 @@ The roadmap is directional. Future syntax will be designed and validated before 
 
 ### 5. Parametric 2D And 3D Design
 
+- [x] 2-D parametric sketch blocks with math coordinate system (Y-up origin).
+- [x] Shapes: circle, rectangle, square, triangle, ellipse, arc, polygon, line.
+- [x] Polar curves with arbitrary `r(t)` equations (rose, spiral, cardioid, involute …).
+- [x] Linear, radius, and angle dimensions.
+- [x] Datum points and axes as construction references.
+- [x] Interactive 3-D canvas: pad (extrude) and pocket operations, mouse orbit / pan / zoom, auto-fit.
+- [x] 3-D profiles: rect, circle, and spur gear (`teeth=` `module=`) with pitch-circle meshing.
+- [x] Datum planes (XY / XZ / YZ) and datum axes (X / Y / Z) in 3-D.
 - [ ] Define units, variables, expressions, and reusable parameters.
-- [ ] Add constrained 2D sketches with dimensions and geometric relationships.
-- [ ] Add solid operations such as extrude, revolve, sweep, loft, fillet, chamfer, shell, and boolean operations.
-- [ ] Add reference planes, coordinate systems, bodies, parts, and assemblies.
+- [ ] Add constrained sketch relationships (parallel, perpendicular, coincident, equal).
+- [ ] Add revolve, sweep, loft, fillet, chamfer, shell, and boolean operations.
+- [ ] Add bodies, parts, and assemblies with relative positioning constraints.
 - [ ] Preserve a feature history so changes rebuild predictably.
 - [ ] Support materials, appearance, mass properties, and engineering metadata.
 - [ ] Explore FreeCAD integration and export to interoperable formats such as STEP.

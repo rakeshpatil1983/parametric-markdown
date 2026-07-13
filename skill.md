@@ -13,7 +13,8 @@ No build step, no npm, no external dependencies. Diagrams live in fenced code bl
 | ` ```line ` | Single-line / one-line power distribution diagram |
 | ` ```wiring ` | Physical panel wiring diagram |
 | ` ```waveform ` | Idealized educational signal waveforms |
-| ` ```sketch ` | **2-D parametric CAD sketch** (new) |
+| ` ```sketch ` | 2-D parametric CAD sketch (shapes, polar curves, dimensions) |
+| ` ```sketch3d ` | **Interactive 3-D solid model** (pad/pocket, orbit/pan/zoom, gear profile) |
 
 ---
 
