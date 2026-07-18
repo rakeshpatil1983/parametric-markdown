@@ -13,6 +13,7 @@ No build step, no npm, no external dependencies. Diagrams live in fenced code bl
 | ` ```line ` | Single-line / one-line power distribution diagram |
 | ` ```wiring ` | Physical panel wiring diagram |
 | ` ```waveform ` | Idealized educational signal waveforms |
+| ` ```chart ` | Educational Cartesian, polar, and Smith charts |
 | ` ```sketch ` | 2-D parametric CAD sketch (shapes, polar curves, dimensions) |
 | ` ```sketch3d ` | **Interactive 3-D solid model** (pad/pocket, orbit/pan/zoom, gear profile) |
 
@@ -142,9 +143,52 @@ time start=0 end=20 unit=ms divisions=10
 marker T1 at=5 label="rising edge"
 ```
 
+## 5. Educational Charts — ` ```chart ` / ` ```polar ` / ` ```smith `
+
+Use chart blocks for explanatory plots that support a lesson, design note, or RF matching discussion. Do not present chart output as simulated, measured, or tolerance-verified data.
+
+### Cartesian charts
+```chart
+title "RC low-pass response"
+type cartesian
+canvas width=860 height=460
+axes x="Frequency" y="Magnitude" xunit=Hz yunit=dB xmin=10 xmax=100000 ymin=-42 ymax=4 xscale=log
+
+series GAIN label="Gain" x=[10,100000] y="-20*log10(sqrt(1+pow(x/1000,2)))" samples=420 color=#2563eb
+point FC x=1000 y=-3 label="-3 dB"
+marker FC_LINE x=1000 label="cutoff"
+```
+
+### Polar charts
+```polar
+title "Directional response"
+axes rmax=1 divisions=5 spokes=12
+
+series CARDIOID label="Cardioid" r="0.5+0.5*cos(t)" t=[0,2*pi] samples=720 color=#0f766e
+series DIPOLE label="Dipole" r="abs(cos(t))" t=[0,2*pi] samples=720 color=#7c3aed
+```
+
+### Smith charts
+```smith
+title "Impedance matching path"
+axes z0=50
+
+trace MATCH label="match path" points="25,20;35,12;50,0;75,-18" color=#dc2626
+point LOAD z="25,20" label="load"
+```
+
+### Chart rules
+- Use `chart` with `type cartesian` for x-y plots; `cartesian` and `xy` are aliases.
+- Use `polar` for angular patterns. Expressions use `t` in radians.
+- Use `smith` for normalized impedance/reflection teaching charts. `axes z0=50` sets the reference impedance for ohmic `z=` and `points=`.
+- Cartesian traces accept `points="x,y;x,y"` or an expression with `x=[start,end] y="..." samples=N`.
+- Polar traces accept `points="angle,r;angle,r"` or an expression with `r="..." t=[start,end] samples=N`.
+- Smith traces accept `points="R,X;R,X"` and Smith points accept `z="R,X"` or direct `gamma="re,im"`.
+- Keep chart labels short and explain assumptions in surrounding Markdown.
+
 ---
 
-## 5. 2-D Parametric Sketch — ` ```sketch `
+## 6. 2-D Parametric Sketch — ` ```sketch `
 
 A CAD-style sketch with a **math coordinate system** (y-axis up, origin configurable).  
 Coordinates are in **model units**; multiply by `scale` to get SVG pixels.
@@ -250,7 +294,7 @@ dim radius DR ref=HOLE1 label="R10"
 
 ---
 
-## 6. 3-D Parametric Sketch — ` ```sketch3d `
+## 7. 3-D Parametric Sketch — ` ```sketch3d `
 
 Interactive 3-D solid model rendered on an HTML `<canvas>`.  
 **Mouse controls**: drag = orbit · Shift+drag = pan · scroll = zoom · ↺ button = reset view.

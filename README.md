@@ -6,7 +6,7 @@ Created by **Rakesh Patil**.
 
 Parametric Markdown is an early-stage, text-first design language and browser renderer for creating technical designs from readable Markdown-like source. The long-term goal is one deterministic language that humans and LLMs can write, review, version, validate, and exchange with established engineering tools.
 
-The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, **idealized educational waveforms**, **2-D parametric CAD sketches**, and **interactive 3-D solid modelling**. PCB design and CAD export remain planned work.
+The project currently supports **electronic schematics**, **electrical single-line diagrams**, **physical panel wiring**, **idealized educational waveforms**, **educational Cartesian, polar, and Smith charts**, **2-D parametric CAD sketches**, and **interactive 3-D solid modelling**. PCB design and CAD export remain planned work.
 
 ## Why Parametric Markdown?
 
@@ -33,6 +33,7 @@ Parametric Markdown is a prototype. The current browser application includes:
 - Separate power feeders, relay control commands, and equipment-status feedback.
 - Physical panel-wiring blocks with terminal IDs, wire numbers, colors, sizes, automatic routing, and sticker-style SVG output.
 - Educational waveform sheets with ideal sine, PWM, triangle, sawtooth, pulse, step, DC, and exponential traces.
+- Educational chart blocks with Cartesian x-y plots, polar plots, and Smith chart impedance paths.
 - 2-D parametric CAD sketches with circles, rectangles, triangles, ellipses, arcs, polygons, polar curves, and linear/radius/angle dimensions.
 - Interactive 3-D solid modelling on an HTML canvas: pad and pocket operations with rect, circle, and spur-gear profiles; datum planes and axes; mouse orbit, pan, and zoom with auto-fit.
 - SVG and Markdown downloads.
@@ -53,7 +54,7 @@ cd D:\Rakesh_patil\schematic_markdown
 python -m http.server 4173
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example also demonstrates a DOL starter wiring sticker and an educational waveform sheet.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173) in a browser. The included example also demonstrates a DOL starter wiring sticker, an educational waveform sheet, and Cartesian, polar, and Smith charts.
 
 ## Browser Integration
 
@@ -170,6 +171,38 @@ marker SWITCH at=2 label="switch closes"
 
 Waveform blocks are deliberately explanatory. They align idealized signal shapes and events for teaching, but do not simulate the surrounding circuit.
 
+### Educational Charts
+
+````markdown
+```chart
+title "RC low-pass response"
+type cartesian
+canvas width=860 height=460
+axes x="Frequency" y="Magnitude" xunit=Hz yunit=dB xmin=10 xmax=100000 ymin=-42 ymax=4 xscale=log
+
+series GAIN label="Gain" x=[10,100000] y="-20*log10(sqrt(1+pow(x/1000,2)))" samples=420 color=#2563eb
+marker FC x=1000 label="cutoff"
+```
+
+```polar
+title "Directional response"
+axes rmax=1 divisions=5 spokes=12
+
+series CARDIOID label="Cardioid" r="0.5+0.5*cos(t)" t=[0,2*pi] samples=720 color=#0f766e
+series DIPOLE label="Dipole" r="abs(cos(t))" t=[0,2*pi] samples=720 color=#7c3aed
+```
+
+```smith
+title "Impedance matching path"
+axes z0=50
+
+trace MATCH label="match path" points="25,20;35,12;50,0;75,-18" color=#dc2626
+point LOAD z="25,20" label="load"
+```
+````
+
+Chart blocks are for teaching and design explanation. Cartesian traces accept point lists or simple `y=` expressions, polar traces accept `r(t)` expressions, and Smith charts plot impedance points or paths on a normalized grid.
+
 ### 2-D Parametric Sketch
 
 ````markdown
@@ -226,6 +259,7 @@ The roadmap is directional. Future syntax will be designed and validated before 
 - [x] Markdown fenced blocks for electronic schematics.
 - [x] A distinct electrical single-line domain.
 - [x] Idealized educational waveform sheets.
+- [x] Educational Cartesian, polar, and Smith chart sheets.
 - [x] Browser rendering and diagnostics.
 - [x] SVG and source downloads.
 - [ ] Extract a reusable parser, typed intermediate representation, and renderer API from the browser UI.
@@ -306,7 +340,7 @@ Typed design model
       +--> SVG / browser preview
       +--> KiCad schematic and PCB
       +--> Wiring documents and schedules
-      +--> Educational waveform SVG
+      +--> Educational waveform and chart SVG
       +--> FreeCAD / STEP and 3D preview
 ```
 

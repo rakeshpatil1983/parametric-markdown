@@ -37,6 +37,14 @@
     .waveform-value { font: 700 8px/1 Inter, Arial, sans-serif; fill: #64748b; }
     .waveform-time { font: 700 8.5px/1 Inter, Arial, sans-serif; fill: #475569; }
     .waveform-marker { font: 800 8.5px/1 Inter, Arial, sans-serif; fill: #334155; }
+    .chart-title { font: 800 17px/1 Inter, Arial, sans-serif; fill: #172033; }
+    .chart-subtitle { font: 600 9.5px/1 Inter, Arial, sans-serif; fill: #64748b; }
+    .chart-axis-label { font: 800 10px/1 Inter, Arial, sans-serif; fill: #334155; }
+    .chart-tick { font: 700 8.5px/1 Inter, Arial, sans-serif; fill: #64748b; }
+    .chart-legend { font: 700 9.5px/1 Inter, Arial, sans-serif; fill: #334155; }
+    .chart-marker { font: 800 8.5px/1 Inter, Arial, sans-serif; fill: #334155; paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+    .chart-grid-major { stroke: #cbd5e1; stroke-width: 1; }
+    .chart-grid-minor { stroke: #e2e8f0; stroke-width: 0.8; }
   `;
   const CATALOG = window.KICAD_SYMBOL_CATALOG || { symbols: {}, libraries: {}, loadedLibraries: {}, symbolCount: 0, generatedAt: null };
   const knownSymbolCache = new Map();
@@ -439,6 +447,42 @@ VC: exponential label="Capacitor charging" from=0 to=5 tau=2 unit=V color=#16a34
 
 marker SWITCH at=2 label="trigger"
 marker SAMPLE at=7 label="sample"
+\`\`\`
+
+## Educational Cartesian chart
+
+\`\`\`chart
+title "RC low-pass response"
+type cartesian
+canvas width=860 height=460
+axes x="Frequency" y="Magnitude" xunit=Hz yunit=dB xmin=10 xmax=100000 ymin=-42 ymax=4 xscale=log divisions=4 ydivisions=7
+
+series GAIN label="Gain" x=[10,100000] y="-20*log10(sqrt(1+pow(x/1000,2)))" samples=420 color=#2563eb
+series PHASE label="Phase / 10" x=[10,100000] y="-atan(x/1000)*180/pi/10" samples=420 color=#dc2626
+marker FC x=1000 label="cutoff"
+\`\`\`
+
+## Educational polar chart
+
+\`\`\`polar
+title "Directional response"
+canvas width=620 height=560
+axes rmax=1 divisions=5 spokes=12 unit=""
+
+series CARDIOID label="Cardioid microphone" r="0.5+0.5*cos(t)" t=[0,2*pi] samples=720 color=#0f766e
+series DIPOLE label="Dipole pattern" r="abs(cos(t))" t=[0,2*pi] samples=720 color=#7c3aed
+\`\`\`
+
+## Educational Smith chart
+
+\`\`\`smith
+title "Impedance matching path"
+canvas width=660 height=560
+axes z0=50
+
+trace MATCH label="match path" points="25,20;35,12;50,0;75,-18;50,0" color=#dc2626
+point LOAD z="25,20" label="load"
+point MATCHED z="50,0" label="matched"
 \`\`\``;
 
   function escapeHtml(value) {
@@ -616,7 +660,7 @@ marker SAMPLE at=7 label="sample"
 
   function extractDiagramBlocks(markdown) {
     const blocks = [];
-    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring|waveform|waveforms|sketch|sketch2d|model2d|2d|sketch3d|3d|model3d|solid)\s*$/gim;
+    const fenceRe = /^```(circuit|schematic|line|line-diagram|singleline|single-line|one-line|wiring|panel-wiring|waveform|waveforms|chart|charts|plot|plots|cartesian|xy|polar|smith|sketch|sketch2d|model2d|2d|sketch3d|3d|model3d|solid)\s*$/gim;
     let match;
     while ((match = fenceRe.exec(markdown)) !== null) {
       const startIndex = match.index + match[0].length;
@@ -4586,6 +4630,681 @@ marker SAMPLE at=7 label="sample"
     </svg>`;
   }
 
+  // -- Educational charts ---------------------------------------------------
+
+  const CHART_TYPE_ALIASES = {
+    xy: "cartesian",
+    plot: "cartesian",
+    plots: "cartesian",
+    rectangular: "cartesian",
+    smithchart: "smith"
+  };
+  const CHART_TYPES = new Set(["cartesian", "polar", "smith"]);
+  const DEFAULT_CHART_COLORS = [
+    "#2563eb", "#dc2626", "#0f766e", "#7c3aed", "#d97706", "#0891b2", "#db2777", "#475569"
+  ];
+
+  function normalizeChartType(value) {
+    const normalized = String(value || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
+    return CHART_TYPE_ALIASES[normalized] || normalized;
+  }
+
+  function chartNumber(attrs, key, fallback) {
+    const value = attrs?.[key];
+    if (value === undefined || value === null || value === "") return fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  }
+
+  function boundedChartNumber(value, fallback, min, max) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.max(min, Math.min(max, numeric));
+  }
+
+  function chartSafeExpression(expr) {
+    const names = {
+      log10: "Math.log10",
+      asin: "Math.asin",
+      acos: "Math.acos",
+      atan: "Math.atan",
+      sin: "Math.sin",
+      cos: "Math.cos",
+      tan: "Math.tan",
+      sqrt: "Math.sqrt",
+      abs: "Math.abs",
+      exp: "Math.exp",
+      log: "Math.log",
+      pow: "Math.pow",
+      min: "Math.min",
+      max: "Math.max",
+      floor: "Math.floor",
+      ceil: "Math.ceil",
+      round: "Math.round",
+      pi: "Math.PI",
+      e: "Math.E"
+    };
+    return String(expr || "0")
+      .replace(/\^/g, "**")
+      .replace(/\b(log10|asin|acos|atan|sin|cos|tan|sqrt|abs|exp|log|pow|min|max|floor|ceil|round|pi|e)\b/gi, (name) => names[name.toLowerCase()] || name);
+  }
+
+  function chartEvalMath(expr, vars = {}) {
+    try {
+      const safe = chartSafeExpression(expr);
+      const names = Object.keys(vars).filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
+      const values = names.map((name) => vars[name]);
+      const result = Function(...names, `"use strict"; return (${safe});`)(...values);
+      return Number.isFinite(result) ? result : NaN;
+    } catch {
+      return NaN;
+    }
+  }
+
+  function chartRange(value, fallback) {
+    const text = String(value || "").trim();
+    const bracket = text.match(/^\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\]$/);
+    const spread = text.match(/^(.+)\.\.(.+)$/);
+    const match = bracket || spread;
+    if (!match) return fallback;
+    const start = chartEvalMath(match[1]);
+    const end = chartEvalMath(match[2]);
+    return Number.isFinite(start) && Number.isFinite(end) && start !== end ? [start, end] : fallback;
+  }
+
+  function chartExpressionVars(attrs, baseVars = {}) {
+    const reserved = new Set([
+      "label", "color", "points", "x", "y", "r", "eq", "fn", "samples", "t", "unit",
+      "stroke_width", "stroke-width", "markers", "z", "gamma", "normalized", "angle_unit",
+      "angleunit", "marker"
+    ]);
+    const vars = { ...baseVars };
+    for (const [key, value] of Object.entries(attrs || {})) {
+      if (reserved.has(key)) continue;
+      if (!/^[A-Za-z_$][\w$]*$/.test(key)) continue;
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) vars[key] = numeric;
+    }
+    return vars;
+  }
+
+  function chartFormatValue(value) {
+    if (!Number.isFinite(value)) return "-";
+    const abs = Math.abs(value);
+    if (abs > 0 && (abs >= 10000 || abs < 0.01)) return value.toExponential(1).replace("+", "");
+    if (abs >= 100 || Number.isInteger(value)) return String(Math.round(value * 100) / 100);
+    return String(Math.round(value * 1000) / 1000);
+  }
+
+  function chartPairList(value) {
+    const text = String(value || "").trim();
+    if (!text) return [];
+    return text.split(/[;|]/).map((item) => {
+      const trimmed = item.trim().replace(/^\(/, "").replace(/\)$/, "");
+      const separator = trimmed.includes(":") ? ":" : ",";
+      const parts = trimmed.split(separator);
+      if (parts.length < 2) return null;
+      const x = chartEvalMath(parts[0].trim());
+      const y = chartEvalMath(parts.slice(1).join(separator).trim());
+      return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    }).filter(Boolean);
+  }
+
+  function parseChartDiagram(source, options = {}) {
+    const startLine = options.startLine || 1;
+    const languageType = normalizeChartType(options.language);
+    const diagram = {
+      kind: "chart",
+      type: CHART_TYPES.has(languageType) ? languageType : "cartesian",
+      title: "Educational chart",
+      canvas: { width: 760, height: 460 },
+      axes: {},
+      series: [],
+      markers: [],
+      diagnostics: []
+    };
+    const seenSeries = new Set();
+    const seenMarkers = new Set();
+
+    source.split(/\r\n|\r|\n/).forEach((rawLine, index) => {
+      const lineNumber = startLine + index;
+      const line = stripComment(rawLine);
+      if (!line) return;
+
+      const titleMatch = line.match(/^title\s+(.+)$/i);
+      if (titleMatch) {
+        diagram.title = unquoteValue(titleMatch[1]);
+        return;
+      }
+
+      const typeMatch = line.match(/^type\s+([A-Za-z_-]+)(.*)$/i);
+      if (typeMatch) {
+        const type = normalizeChartType(typeMatch[1]);
+        if (CHART_TYPES.has(type)) diagram.type = type;
+        else diagram.diagnostics.push(error(lineNumber, `Unknown chart type "${typeMatch[1]}".`));
+        Object.assign(diagram.axes, parseAttributes(typeMatch[2]));
+        return;
+      }
+
+      const domainMatch = line.match(/^(cartesian|xy|polar|smith)\b(.*)$/i);
+      if (domainMatch) {
+        const type = normalizeChartType(domainMatch[1]);
+        if (CHART_TYPES.has(type)) diagram.type = type;
+        Object.assign(diagram.axes, parseAttributes(domainMatch[2]));
+        return;
+      }
+
+      const canvasMatch = line.match(/^canvas\b(.*)$/i);
+      if (canvasMatch) {
+        const attrs = parseAttributes(canvasMatch[1]);
+        diagram.canvas = {
+          width: boundedChartNumber(attrs.width, 760, 320, 1600),
+          height: boundedChartNumber(attrs.height, 460, 260, 1200)
+        };
+        return;
+      }
+
+      const axesMatch = line.match(/^(axes|axis)\b(.*)$/i);
+      if (axesMatch) {
+        Object.assign(diagram.axes, parseAttributes(axesMatch[2]));
+        if (diagram.axes.type) {
+          const type = normalizeChartType(diagram.axes.type);
+          if (CHART_TYPES.has(type)) diagram.type = type;
+        }
+        return;
+      }
+
+      const markerMatch = line.match(/^marker\s+([A-Za-z_][\w-]*)\b(.*)$/i);
+      if (markerMatch) {
+        const id = markerMatch[1];
+        const attrs = parseAttributes(markerMatch[2]);
+        if (seenMarkers.has(id.toLowerCase())) {
+          diagram.diagnostics.push(error(lineNumber, `Duplicate chart marker "${id}".`));
+          return;
+        }
+        seenMarkers.add(id.toLowerCase());
+        diagram.markers.push({ id, attrs, line: lineNumber, index: diagram.markers.length });
+        return;
+      }
+
+      const seriesMatch = line.match(/^(series|trace|point)\s+([A-Za-z_][\w-]*)\b(.*)$/i);
+      if (seriesMatch) {
+        const kind = seriesMatch[1].toLowerCase() === "point" ? "point" : "trace";
+        const id = seriesMatch[2];
+        const attrs = parseAttributes(seriesMatch[3]);
+        if (seenSeries.has(id.toLowerCase())) {
+          diagram.diagnostics.push(error(lineNumber, `Duplicate chart series "${id}".`));
+          return;
+        }
+        seenSeries.add(id.toLowerCase());
+        diagram.series.push({ id, kind, attrs, line: lineNumber, index: diagram.series.length });
+        return;
+      }
+
+      diagram.diagnostics.push(error(lineNumber, `Could not parse chart statement: ${line}`));
+    });
+
+    validateChartDiagram(diagram);
+    return diagram;
+  }
+
+  function validateChartDiagram(diagram) {
+    const diagnostics = diagram.diagnostics;
+    if (!CHART_TYPES.has(diagram.type)) diagnostics.push(error(1, `Unknown chart type "${diagram.type}".`));
+    if (!diagram.series.length) diagnostics.push(warning(1, "Chart block has no series, trace, or point statements."));
+
+    for (const item of diagram.series) {
+      if (item.attrs.color && !isColor(item.attrs.color)) {
+        diagnostics.push(error(item.line, `Chart item "${item.id}" has invalid color "${item.attrs.color}".`));
+      }
+      if (item.attrs.samples !== undefined) {
+        const samples = Number(item.attrs.samples);
+        if (!Number.isFinite(samples) || samples < 2 || samples > 5000) {
+          diagnostics.push(error(item.line, `Chart item "${item.id}" samples must be from 2 to 5000.`));
+        }
+      }
+      if (diagram.type === "cartesian" && item.kind === "trace" && !item.attrs.points && !item.attrs.y && !item.attrs.eq && !item.attrs.fn) {
+        diagnostics.push(error(item.line, `Cartesian trace "${item.id}" needs points= or a y=/eq= expression.`));
+      }
+      if (diagram.type === "cartesian" && item.kind === "point" && !item.attrs.points && (item.attrs.x === undefined || item.attrs.y === undefined)) {
+        diagnostics.push(error(item.line, `Cartesian point "${item.id}" needs x= and y= values.`));
+      }
+      if (diagram.type === "polar" && item.kind === "trace" && !item.attrs.points && !item.attrs.r && !item.attrs.eq && !item.attrs.fn) {
+        diagnostics.push(error(item.line, `Polar trace "${item.id}" needs points= or an r=/eq= expression.`));
+      }
+      if (diagram.type === "smith" && !item.attrs.points && !item.attrs.z && !item.attrs.gamma) {
+        diagnostics.push(error(item.line, `Smith chart item "${item.id}" needs points=, z=, or gamma=.`));
+      }
+    }
+    for (const marker of diagram.markers) {
+      if (marker.attrs.color && !isColor(marker.attrs.color)) {
+        diagnostics.push(error(marker.line, `Chart marker "${marker.id}" has invalid color "${marker.attrs.color}".`));
+      }
+    }
+    return diagnostics;
+  }
+
+  function chartCartesianPoints(item, diagram) {
+    const attrs = item.attrs;
+    if (attrs.points) return chartPairList(attrs.points);
+    if (item.kind === "point") {
+      const x = chartEvalMath(attrs.x);
+      const y = chartEvalMath(attrs.y);
+      return Number.isFinite(x) && Number.isFinite(y) ? [{ x, y }] : [];
+    }
+    const axis = diagram.axes;
+    const defaultRange = chartRange(axis.xrange, null) || [
+      Number.isFinite(Number(axis.xmin)) ? Number(axis.xmin) : 0,
+      Number.isFinite(Number(axis.xmax)) ? Number(axis.xmax) : 10
+    ];
+    const range = chartRange(attrs.x, defaultRange) || defaultRange;
+    const samples = Math.round(boundedChartNumber(attrs.samples, 240, 2, 5000));
+    const expr = attrs.y || attrs.eq || attrs.fn || "0";
+    const xScale = String(attrs.xscale || axis.xscale || "linear").toLowerCase();
+    const logRange = xScale === "log" && range[0] > 0 && range[1] > 0;
+    const start = logRange ? Math.log10(range[0]) : range[0];
+    const end = logRange ? Math.log10(range[1]) : range[1];
+    const points = [];
+    for (let i = 0; i <= samples; i += 1) {
+      const f = i / samples;
+      const x = logRange ? 10 ** (start + (end - start) * f) : start + (end - start) * f;
+      const y = chartEvalMath(expr, chartExpressionVars(attrs, { x }));
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
+    }
+    return points;
+  }
+
+  function chartPolarPoints(item) {
+    const attrs = item.attrs;
+    if (attrs.points) {
+      const angleUnit = String(attrs.angle_unit || attrs.angleunit || "deg").toLowerCase();
+      return chartPairList(attrs.points).map((point) => ({
+        theta: angleUnit.startsWith("rad") ? point.x : point.x * Math.PI / 180,
+        r: point.y
+      }));
+    }
+    const range = chartRange(attrs.t || attrs.range, [0, 2 * Math.PI]);
+    const samples = Math.round(boundedChartNumber(attrs.samples, 360, 2, 5000));
+    const expr = attrs.r || attrs.eq || attrs.fn || "1";
+    const points = [];
+    for (let i = 0; i <= samples; i += 1) {
+      const t = range[0] + (range[1] - range[0]) * i / samples;
+      const rawR = chartEvalMath(expr, chartExpressionVars(attrs, { t }));
+      if (!Number.isFinite(rawR)) continue;
+      const flipped = rawR < 0;
+      points.push({ theta: flipped ? t + Math.PI : t, r: Math.abs(rawR) });
+    }
+    return points;
+  }
+
+  function chartParseSmithImpedance(value) {
+    const text = String(value || "").trim().replace(/^\(/, "").replace(/\)$/, "").replace(/\s+/g, "");
+    if (!text) return null;
+    if (text.includes(",") || text.includes(":")) {
+      const separator = text.includes(":") ? ":" : ",";
+      const parts = text.split(separator);
+      const r = chartEvalMath(parts[0]);
+      const x = chartEvalMath(parts.slice(1).join(separator));
+      return Number.isFinite(r) && Number.isFinite(x) ? { r, x } : null;
+    }
+    const realOnly = chartEvalMath(text);
+    if (Number.isFinite(realOnly)) return { r: realOnly, x: 0 };
+    const leadingJ = text.match(/^([+-]?)j([+-]?\d*\.?\d+(?:e[+-]?\d+)?)$/i);
+    if (leadingJ) return { r: 0, x: Number(`${leadingJ[1] || "+"}${leadingJ[2]}`) };
+    const realJFirst = text.match(/^([+-]?\d*\.?\d+(?:e[+-]?\d+)?)([+-])j([+-]?\d*\.?\d+(?:e[+-]?\d+)?)$/i);
+    if (realJFirst) return { r: Number(realJFirst[1]), x: Number(`${realJFirst[2]}${realJFirst[3]}`) };
+    const realJLast = text.match(/^([+-]?\d*\.?\d+(?:e[+-]?\d+)?)([+-])([+-]?\d*\.?\d+(?:e[+-]?\d+)?)j$/i);
+    if (realJLast) return { r: Number(realJLast[1]), x: Number(`${realJLast[2]}${realJLast[3]}`) };
+    return null;
+  }
+
+  function chartParseGamma(value) {
+    const text = String(value || "").trim();
+    const polar = text.match(/^([^<]+)<([^<]+)$/);
+    if (polar) {
+      const mag = chartEvalMath(polar[1]);
+      const angle = chartEvalMath(polar[2]) * Math.PI / 180;
+      return Number.isFinite(mag) && Number.isFinite(angle) ? { re: mag * Math.cos(angle), im: mag * Math.sin(angle) } : null;
+    }
+    const pair = chartPairList(text.replace(/;/g, "|"))[0];
+    return pair ? { re: pair.x, im: pair.y } : null;
+  }
+
+  function chartSmithGammaFromImpedance(point, z0, normalized) {
+    const r = normalized ? point.r : point.r / z0;
+    const x = normalized ? point.x : point.x / z0;
+    const denom = (r + 1) ** 2 + x ** 2;
+    if (!Number.isFinite(denom) || denom <= 1e-12) return null;
+    return {
+      re: (r ** 2 + x ** 2 - 1) / denom,
+      im: (2 * x) / denom,
+      r: point.r,
+      x: point.x
+    };
+  }
+
+  function chartSmithPoints(item, diagram) {
+    const attrs = item.attrs;
+    if (attrs.gamma) {
+      const values = String(attrs.gamma).split(/[;|]/).map(chartParseGamma).filter(Boolean);
+      return values.map((point) => ({ ...point, directGamma: true }));
+    }
+    const z0 = Math.max(1e-9, chartNumber(diagram.axes, "z0", 50));
+    const normalized = String(attrs.normalized ?? diagram.axes.normalized ?? "false").toLowerCase() === "true";
+    const rawPoints = attrs.points
+      ? String(attrs.points).split(/[;|]/).map(chartParseSmithImpedance).filter(Boolean)
+      : attrs.z
+        ? [chartParseSmithImpedance(attrs.z)].filter(Boolean)
+        : [];
+    return rawPoints.map((point) => chartSmithGammaFromImpedance(point, z0, normalized)).filter(Boolean);
+  }
+
+  function chartSeriesColor(item) {
+    return item.attrs.color || DEFAULT_CHART_COLORS[item.index % DEFAULT_CHART_COLORS.length];
+  }
+
+  function renderChartLegend(items, x, y) {
+    const rows = items.filter((item) => item.points.length).slice(0, 8);
+    if (!rows.length) return "";
+    return `<g class="chart-legend-box">
+      <rect x="${x}" y="${y}" width="178" height="${Math.max(30, rows.length * 18 + 12)}" rx="4" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" opacity="0.94"></rect>
+      ${rows.map((entry, index) => {
+        const yy = y + 18 + index * 18;
+        const label = clippedLineText(entry.item.attrs.label || entry.item.id, 24);
+        return `<line x1="${x + 10}" y1="${yy - 3}" x2="${x + 30}" y2="${yy - 3}" stroke="${escapeHtml(entry.color)}" stroke-width="2.4"></line>
+          <text class="chart-legend" x="${x + 38}" y="${yy}">${escapeHtml(label)}</text>`;
+      }).join("\n")}
+    </g>`;
+  }
+
+  function renderCartesianChartSvg(diagram, options = {}) {
+    const width = diagram.canvas.width;
+    const height = diagram.canvas.height;
+    const margin = { left: 78, right: 34, top: 76, bottom: 62 };
+    const plot = {
+      x: margin.left,
+      y: margin.top,
+      w: width - margin.left - margin.right,
+      h: height - margin.top - margin.bottom
+    };
+    const axis = diagram.axes;
+    const dataItems = diagram.series.map((item) => ({
+      item,
+      points: chartCartesianPoints(item, diagram),
+      color: chartSeriesColor(item)
+    }));
+    const allPoints = dataItems.flatMap((entry) => entry.points);
+    const rangeFromData = (key, fallback) => {
+      const values = allPoints.map((point) => point[key]).filter(Number.isFinite);
+      if (!values.length) return fallback;
+      return [Math.min(...values), Math.max(...values)];
+    };
+    const xData = rangeFromData("x", [0, 10]);
+    const yData = rangeFromData("y", [-1, 1]);
+    const xRange = chartRange(axis.xrange, null);
+    const yRange = chartRange(axis.yrange, null);
+    let xMin = Number.isFinite(Number(axis.xmin)) ? Number(axis.xmin) : xRange?.[0] ?? xData[0];
+    let xMax = Number.isFinite(Number(axis.xmax)) ? Number(axis.xmax) : xRange?.[1] ?? xData[1];
+    let yMin = Number.isFinite(Number(axis.ymin)) ? Number(axis.ymin) : yRange?.[0] ?? yData[0];
+    let yMax = Number.isFinite(Number(axis.ymax)) ? Number(axis.ymax) : yRange?.[1] ?? yData[1];
+    if (xMin === xMax) { xMin -= 1; xMax += 1; }
+    if (yMin === yMax) { yMin -= 1; yMax += 1; }
+    const xScale = String(axis.xscale || "linear").toLowerCase();
+    const yScale = String(axis.yscale || "linear").toLowerCase();
+    const xLog = xScale === "log" && xMin > 0 && xMax > 0;
+    const yLog = yScale === "log" && yMin > 0 && yMax > 0;
+    const sxMin = xLog ? Math.log10(xMin) : xMin;
+    const sxMax = xLog ? Math.log10(xMax) : xMax;
+    const syMin = yLog ? Math.log10(yMin) : yMin;
+    const syMax = yLog ? Math.log10(yMax) : yMax;
+    const xOf = (x) => plot.x + ((xLog ? Math.log10(x) : x) - sxMin) / (sxMax - sxMin) * plot.w;
+    const yOf = (y) => plot.y + plot.h - ((yLog ? Math.log10(y) : y) - syMin) / (syMax - syMin) * plot.h;
+    const xDiv = Math.round(boundedChartNumber(axis.divisions ?? axis.xdivisions, 8, 2, 20));
+    const yDiv = Math.round(boundedChartNumber(axis.ydivisions, 6, 2, 20));
+    const xTicks = Array.from({ length: xDiv + 1 }, (_, index) => {
+      const f = index / xDiv;
+      const scaled = sxMin + (sxMax - sxMin) * f;
+      const value = xLog ? 10 ** scaled : scaled;
+      const x = plot.x + f * plot.w;
+      return `<line class="${index === 0 || index === xDiv ? "chart-grid-major" : "chart-grid-minor"}" x1="${x.toFixed(2)}" y1="${plot.y}" x2="${x.toFixed(2)}" y2="${plot.y + plot.h}"></line>
+        <text class="chart-tick" x="${x.toFixed(2)}" y="${plot.y + plot.h + 20}" text-anchor="middle">${escapeHtml(chartFormatValue(value))}</text>`;
+    }).join("\n");
+    const yTicks = Array.from({ length: yDiv + 1 }, (_, index) => {
+      const f = index / yDiv;
+      const scaled = syMin + (syMax - syMin) * f;
+      const value = yLog ? 10 ** scaled : scaled;
+      const y = plot.y + plot.h - f * plot.h;
+      return `<line class="${index === 0 || index === yDiv ? "chart-grid-major" : "chart-grid-minor"}" x1="${plot.x}" y1="${y.toFixed(2)}" x2="${plot.x + plot.w}" y2="${y.toFixed(2)}"></line>
+        <text class="chart-tick" x="${plot.x - 10}" y="${(y + 3).toFixed(2)}" text-anchor="end">${escapeHtml(chartFormatValue(value))}</text>`;
+    }).join("\n");
+    const traces = dataItems.map((entry) => {
+      const valid = entry.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && (!xLog || point.x > 0) && (!yLog || point.y > 0));
+      if (!valid.length) return "";
+      const path = valid.map((point, index) => `${index ? "L" : "M"} ${xOf(point.x).toFixed(2)} ${yOf(point.y).toFixed(2)}`).join(" ");
+      const dot = entry.item.kind === "point" || valid.length <= 14 || entry.item.attrs.markers === "true"
+        ? valid.map((point) => `<circle cx="${xOf(point.x).toFixed(2)}" cy="${yOf(point.y).toFixed(2)}" r="${entry.item.kind === "point" ? 4.2 : 2.8}" fill="${escapeHtml(entry.color)}" stroke="#ffffff" stroke-width="1.4"></circle>`).join("\n")
+        : "";
+      return `<g class="chart-series" data-series="${escapeHtml(entry.item.id)}">
+        ${entry.item.kind === "trace" ? `<path d="${path}" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="${path}" fill="none" stroke="${escapeHtml(entry.color)}" stroke-width="${escapeHtml(entry.item.attrs.stroke_width || entry.item.attrs["stroke-width"] || 2.6)}" stroke-linecap="round" stroke-linejoin="round"></path>` : ""}
+        ${dot}
+      </g>`;
+    }).join("\n");
+    const markers = diagram.markers.map((marker) => {
+      const color = marker.attrs.color || "#475569";
+      const label = clippedLineText(marker.attrs.label || marker.id, 18);
+      const parts = [];
+      if (marker.attrs.x !== undefined) {
+        const x = chartEvalMath(marker.attrs.x);
+        if (Number.isFinite(x) && (!xLog || x > 0)) {
+          const sx = xOf(x);
+          parts.push(`<line x1="${sx.toFixed(2)}" y1="${plot.y}" x2="${sx.toFixed(2)}" y2="${plot.y + plot.h}" stroke="${escapeHtml(color)}" stroke-width="1.3" stroke-dasharray="6 5"></line>
+            <text class="chart-marker" x="${sx.toFixed(2)}" y="${plot.y - 10}" text-anchor="middle">${escapeHtml(label)}</text>`);
+        }
+      }
+      if (marker.attrs.y !== undefined) {
+        const y = chartEvalMath(marker.attrs.y);
+        if (Number.isFinite(y) && (!yLog || y > 0)) {
+          const sy = yOf(y);
+          parts.push(`<line x1="${plot.x}" y1="${sy.toFixed(2)}" x2="${plot.x + plot.w}" y2="${sy.toFixed(2)}" stroke="${escapeHtml(color)}" stroke-width="1.3" stroke-dasharray="6 5"></line>`);
+        }
+      }
+      return parts.join("\n");
+    }).join("\n");
+    const xLabel = axis.xlabel || axis.x || "X";
+    const yLabel = axis.ylabel || axis.y || "Y";
+    const xUnit = axis.xunit ? ` (${axis.xunit})` : "";
+    const yUnit = axis.yunit ? ` (${axis.yunit})` : "";
+    const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    return `<svg class="diagram-svg chart-diagram-svg" data-diagram-kind="chart" data-chart-type="cartesian" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img">
+      ${title}
+      <style>${STANDALONE_SVG_STYLE}</style>
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
+      <text class="chart-title" x="24" y="32">${escapeHtml(diagram.title)}</text>
+      <text class="chart-subtitle" x="24" y="51">Cartesian teaching plot - not simulated or measured data</text>
+      <g class="chart-grid">${xTicks}${yTicks}</g>
+      <rect x="${plot.x}" y="${plot.y}" width="${plot.w}" height="${plot.h}" fill="none" stroke="#334155" stroke-width="1.2"></rect>
+      ${markers}
+      ${traces}
+      <text class="chart-axis-label" x="${plot.x + plot.w / 2}" y="${height - 18}" text-anchor="middle">${escapeHtml(xLabel + xUnit)}</text>
+      <text class="chart-axis-label" x="18" y="${plot.y + plot.h / 2}" text-anchor="middle" transform="rotate(-90 18 ${plot.y + plot.h / 2})">${escapeHtml(yLabel + yUnit)}</text>
+      ${renderChartLegend(dataItems, width - margin.right - 190, margin.top + 12)}
+    </svg>`;
+  }
+
+  function renderPolarChartSvg(diagram, options = {}) {
+    const width = diagram.canvas.width;
+    const height = diagram.canvas.height;
+    const cx = width / 2;
+    const cy = height / 2 + 18;
+    const radius = Math.max(80, Math.min(width - 70, height - 120) / 2);
+    const axis = diagram.axes;
+    const dataItems = diagram.series.map((item) => ({
+      item,
+      points: chartPolarPoints(item),
+      color: chartSeriesColor(item)
+    }));
+    const dataMax = Math.max(1e-9, ...dataItems.flatMap((entry) => entry.points.map((point) => point.r).filter(Number.isFinite)));
+    const rMax = Math.max(1e-9, chartNumber(axis, "rmax", chartNumber(axis, "radius", dataMax)));
+    const divisions = Math.round(boundedChartNumber(axis.divisions, 5, 2, 12));
+    const spokes = Math.round(boundedChartNumber(axis.spokes, 12, 4, 36));
+    const rOf = (r) => Math.max(0, r) / rMax * radius;
+    const xy = (point) => {
+      const rr = rOf(point.r);
+      return {
+        x: cx + rr * Math.cos(point.theta),
+        y: cy - rr * Math.sin(point.theta)
+      };
+    };
+    const circles = Array.from({ length: divisions }, (_, index) => {
+      const rr = radius * (index + 1) / divisions;
+      const value = rMax * (index + 1) / divisions;
+      return `<circle cx="${cx}" cy="${cy}" r="${rr.toFixed(2)}" fill="none" class="${index + 1 === divisions ? "chart-grid-major" : "chart-grid-minor"}"></circle>
+        <text class="chart-tick" x="${(cx + 5).toFixed(2)}" y="${(cy - rr + 12).toFixed(2)}">${escapeHtml(chartFormatValue(value))}</text>`;
+    }).join("\n");
+    const spokeLines = Array.from({ length: spokes }, (_, index) => {
+      const theta = index * 2 * Math.PI / spokes;
+      const x = cx + radius * Math.cos(theta);
+      const y = cy - radius * Math.sin(theta);
+      const labelRadius = radius + 18;
+      const lx = cx + labelRadius * Math.cos(theta);
+      const ly = cy - labelRadius * Math.sin(theta);
+      const deg = Math.round(theta * 180 / Math.PI);
+      return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(2)}" y2="${y.toFixed(2)}" class="chart-grid-minor"></line>
+        <text class="chart-tick" x="${lx.toFixed(2)}" y="${(ly + 3).toFixed(2)}" text-anchor="middle">${deg}</text>`;
+    }).join("\n");
+    const traces = dataItems.map((entry) => {
+      const valid = entry.points.filter((point) => Number.isFinite(point.theta) && Number.isFinite(point.r));
+      if (!valid.length) return "";
+      const path = valid.map((point, index) => {
+        const p = xy(point);
+        return `${index ? "L" : "M"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+      }).join(" ");
+      const closed = String(entry.item.attrs.closed || "true").toLowerCase() !== "false";
+      return `<g class="chart-series" data-series="${escapeHtml(entry.item.id)}">
+        <path d="${path}${closed ? " Z" : ""}" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="${path}${closed ? " Z" : ""}" fill="none" stroke="${escapeHtml(entry.color)}" stroke-width="${escapeHtml(entry.item.attrs.stroke_width || entry.item.attrs["stroke-width"] || 2.6)}" stroke-linecap="round" stroke-linejoin="round"></path>
+      </g>`;
+    }).join("\n");
+    const markers = diagram.markers.map((marker) => {
+      const angleUnit = String(marker.attrs.angle_unit || marker.attrs.angleunit || "deg").toLowerCase();
+      const thetaRaw = chartEvalMath(marker.attrs.angle ?? marker.attrs.theta ?? marker.attrs.t);
+      const r = chartEvalMath(marker.attrs.r ?? marker.attrs.radius ?? rMax);
+      if (!Number.isFinite(thetaRaw) || !Number.isFinite(r)) return "";
+      const theta = angleUnit.startsWith("rad") ? thetaRaw : thetaRaw * Math.PI / 180;
+      const p = xy({ theta, r });
+      const color = marker.attrs.color || "#475569";
+      return `<g class="chart-marker-point">
+        <circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="4" fill="${escapeHtml(color)}" stroke="#ffffff" stroke-width="1.4"></circle>
+        <text class="chart-marker" x="${(p.x + 8).toFixed(2)}" y="${(p.y - 8).toFixed(2)}">${escapeHtml(clippedLineText(marker.attrs.label || marker.id, 18))}</text>
+      </g>`;
+    }).join("\n");
+    const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    return `<svg class="diagram-svg chart-diagram-svg" data-diagram-kind="chart" data-chart-type="polar" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img">
+      ${title}
+      <style>${STANDALONE_SVG_STYLE}</style>
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
+      <text class="chart-title" x="24" y="32">${escapeHtml(diagram.title)}</text>
+      <text class="chart-subtitle" x="24" y="51">Polar teaching plot - radius ${escapeHtml(axis.unit || "normalized")}</text>
+      <g class="chart-polar-grid">${circles}${spokeLines}</g>
+      <circle cx="${cx}" cy="${cy}" r="${radius.toFixed(2)}" fill="none" stroke="#334155" stroke-width="1.2"></circle>
+      ${traces}
+      ${markers}
+      ${renderChartLegend(dataItems, width - 206, 72)}
+    </svg>`;
+  }
+
+  function renderSmithChartSvg(diagram, options = {}) {
+    const width = diagram.canvas.width;
+    const height = diagram.canvas.height;
+    const cx = width / 2;
+    const cy = height / 2 + 18;
+    const radius = Math.max(90, Math.min(width - 80, height - 126) / 2);
+    const axis = diagram.axes;
+    const z0 = Math.max(1e-9, chartNumber(axis, "z0", 50));
+    const toSvg = (gamma) => ({ x: cx + gamma.re * radius, y: cy - gamma.im * radius });
+    const smithPathFromSamples = (samples) => samples.map((gamma, index) => {
+      const p = toSvg(gamma);
+      return `${index ? "L" : "M"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+    }).join(" ");
+    const resistanceValues = [0.2, 0.5, 1, 2, 5];
+    const reactanceValues = [0.2, 0.5, 1, 2, 5];
+    const resistanceGrid = resistanceValues.map((r) => {
+      const center = toSvg({ re: r / (r + 1), im: 0 });
+      const rr = radius / (r + 1);
+      return `<circle cx="${center.x.toFixed(2)}" cy="${center.y.toFixed(2)}" r="${rr.toFixed(2)}" fill="none" class="chart-grid-minor"></circle>
+        <text class="chart-tick" x="${(center.x - rr + 8).toFixed(2)}" y="${(cy - 5).toFixed(2)}">r=${escapeHtml(chartFormatValue(r))}</text>`;
+    }).join("\n");
+    const reactanceGrid = reactanceValues.flatMap((xVal) => [xVal, -xVal]).map((xVal) => {
+      const samples = [];
+      for (let i = 0; i <= 180; i += 1) {
+        const r = 30 * i / 180;
+        const point = chartSmithGammaFromImpedance({ r, x: xVal }, 1, true);
+        if (point && point.re ** 2 + point.im ** 2 <= 1.0001) samples.push(point);
+      }
+      const labelPoint = chartSmithGammaFromImpedance({ r: 0.15, x: xVal }, 1, true);
+      const label = labelPoint ? toSvg(labelPoint) : null;
+      return `<path d="${smithPathFromSamples(samples)}" fill="none" class="chart-grid-minor"></path>
+        ${label ? `<text class="chart-tick" x="${label.x.toFixed(2)}" y="${(label.y + (xVal > 0 ? -4 : 10)).toFixed(2)}" text-anchor="middle">x=${escapeHtml(chartFormatValue(xVal))}</text>` : ""}`;
+    }).join("\n");
+    const dataItems = diagram.series.map((item) => ({
+      item,
+      points: chartSmithPoints(item, diagram),
+      color: chartSeriesColor(item)
+    }));
+    const traces = dataItems.map((entry) => {
+      const valid = entry.points.filter((point) => Number.isFinite(point.re) && Number.isFinite(point.im) && point.re ** 2 + point.im ** 2 <= 1.05);
+      if (!valid.length) return "";
+      const path = valid.map((point, index) => {
+        const p = toSvg(point);
+        return `${index ? "L" : "M"} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+      }).join(" ");
+      const dots = valid.map((point) => {
+        const p = toSvg(point);
+        return `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${entry.item.kind === "point" ? 4.4 : 3}" fill="${escapeHtml(entry.color)}" stroke="#ffffff" stroke-width="1.4"></circle>`;
+      }).join("\n");
+      const pointLabel = entry.item.kind === "point"
+        ? (() => {
+          const p = toSvg(valid[0]);
+          const nearCenter = Math.hypot(p.x - cx, p.y - cy) < 26;
+          const dx = nearCenter ? 12 : 8;
+          const dy = nearCenter ? -18 : -8;
+          return `<text class="chart-marker" x="${(p.x + dx).toFixed(2)}" y="${(p.y + dy).toFixed(2)}">${escapeHtml(clippedLineText(entry.item.attrs.label || entry.item.id, 18))}</text>`;
+        })()
+        : "";
+      return `<g class="chart-series" data-series="${escapeHtml(entry.item.id)}">
+        ${entry.item.kind === "trace" ? `<path d="${path}" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="${path}" fill="none" stroke="${escapeHtml(entry.color)}" stroke-width="${escapeHtml(entry.item.attrs.stroke_width || entry.item.attrs["stroke-width"] || 2.6)}" stroke-linecap="round" stroke-linejoin="round"></path>` : ""}
+        ${dots}
+        ${pointLabel}
+      </g>`;
+    }).join("\n");
+    const title = options.title ? `<title>${escapeHtml(options.title)}</title>` : "";
+    return `<svg class="diagram-svg chart-diagram-svg" data-diagram-kind="chart" data-chart-type="smith" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img">
+      ${title}
+      <style>${STANDALONE_SVG_STYLE}</style>
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"></rect>
+      <text class="chart-title" x="24" y="32">${escapeHtml(diagram.title)}</text>
+      <text class="chart-subtitle" x="24" y="51">Smith chart - normalized impedance grid, z0=${escapeHtml(chartFormatValue(z0))} ohm</text>
+      <circle cx="${cx}" cy="${cy}" r="${radius.toFixed(2)}" fill="#ffffff" stroke="#334155" stroke-width="1.3"></circle>
+      <line x1="${(cx - radius).toFixed(2)}" y1="${cy}" x2="${(cx + radius).toFixed(2)}" y2="${cy}" class="chart-grid-major"></line>
+      ${resistanceGrid}
+      ${reactanceGrid}
+      <circle cx="${cx}" cy="${cy}" r="${radius.toFixed(2)}" fill="none" stroke="#334155" stroke-width="1.3"></circle>
+      <text class="chart-tick" x="${(cx - radius + 6).toFixed(2)}" y="${(cy - 8).toFixed(2)}">short</text>
+      <text class="chart-tick" x="${(cx + radius - 6).toFixed(2)}" y="${(cy - 8).toFixed(2)}" text-anchor="end">open</text>
+      <text class="chart-tick" x="${cx}" y="${(cy + 18).toFixed(2)}" text-anchor="middle">match</text>
+      ${traces}
+      ${renderChartLegend(dataItems, width - 206, 72)}
+    </svg>`;
+  }
+
+  function renderChartDiagramSvg(diagram, options = {}) {
+    if (diagram.type === "polar") return renderPolarChartSvg(diagram, options);
+    if (diagram.type === "smith") return renderSmithChartSvg(diagram, options);
+    return renderCartesianChartSvg(diagram, options);
+  }
+
   function renderDiagnostics(diagnostics) {
     if (!diagnostics.length) return "";
     return `<div class="diagnostics">${diagnostics.map((diag) => (
@@ -5275,10 +5994,14 @@ marker SAMPLE at=7 label="sample"
     return ["waveform", "waveforms"].includes(String(language || "").toLowerCase());
   }
 
+  function isChartDiagramLanguage(language) {
+    return ["chart", "charts", "plot", "plots", "cartesian", "xy", "polar", "smith"].includes(String(language || "").toLowerCase());
+  }
+
   function renderMarkdownCircuits(markdown, container) {
     const blocks = extractDiagramBlocks(markdown);
     if (!blocks.length) {
-      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, wiring, waveform, or sketch code block to render a diagram.</div>`;
+      container.innerHTML = `<div class="empty-state">Type Markdown with a circuit, line, wiring, waveform, chart, or sketch code block to render a diagram.</div>`;
       return { blockCount: 0, diagnosticCount: 0, missingLibraries: [] };
     }
 
@@ -5292,6 +6015,9 @@ marker SAMPLE at=7 label="sample"
         }
         if (isWaveformDiagramLanguage(block.language)) {
           return { kind: "waveform", model: parseWaveformDiagram(block.source, { startLine: block.startLine }) };
+        }
+        if (isChartDiagramLanguage(block.language)) {
+          return { kind: "chart", model: parseChartDiagram(block.source, { startLine: block.startLine, language: block.language }) };
         }
         if (isSketchDiagramLanguage(block.language)) {
           return { kind: "sketch", model: parseSketchDiagram(block.source, { startLine: block.startLine }) };
@@ -5322,11 +6048,13 @@ marker SAMPLE at=7 label="sample"
             ? renderWiringDiagramSvg(model, { title: `Panel wiring diagram block ${index + 1}` })
             : entry.kind === "waveform"
               ? renderWaveformDiagramSvg(model, { title: `Educational waveform block ${index + 1}` })
-              : entry.kind === "sketch"
-                ? renderSketchDiagramSvg(model, { title: `Parametric sketch block ${index + 1}` })
-                : entry.kind === "sketch3d"
-                  ? renderSketch3dDiagramHtml(model, { title: `3D sketch block ${index + 1}` })
-                  : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
+              : entry.kind === "chart"
+                ? renderChartDiagramSvg(model, { title: `Educational chart block ${index + 1}` })
+                : entry.kind === "sketch"
+                  ? renderSketchDiagramSvg(model, { title: `Parametric sketch block ${index + 1}` })
+                  : entry.kind === "sketch3d"
+                    ? renderSketch3dDiagramHtml(model, { title: `3D sketch block ${index + 1}` })
+                    : renderCircuitSvg(model, { title: `Electronic schematic block ${index + 1}` });
       } catch (err) {
         console.error(`Render error in block ${index + 1}:`, err);
         svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 72" style="width:100%;display:block"><rect width="520" height="72" rx="4" fill="#fff1f2"/><text x="16" y="26" font-family="system-ui,sans-serif" font-size="13" fill="#b42318" font-weight="600">Render error in block ${index + 1}</text><text x="16" y="48" font-family="system-ui,sans-serif" font-size="11" fill="#991b1b">${escapeHtml(String(err?.message || err))}</text></svg>`;
@@ -5342,17 +6070,20 @@ marker SAMPLE at=7 label="sample"
           ? `${model.devices.length} devices, ${model.wires.length} physical wires`
           : entry.kind === "waveform"
             ? `${model.signals.length} signals, ${model.markers.length} time markers`
-            : entry.kind === "sketch"
-              ? `${model.shapes.length} shapes, ${model.polars.length} polar curves, ${model.datums.length} datums`
-              : entry.kind === "sketch3d"
-                ? `${model.features.length} features, ${model.datumPlanes.length} datum planes, ${model.datumAxes.length} axes`
-                : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
+            : entry.kind === "chart"
+              ? `${model.type} chart, ${model.series.length} series, ${model.markers.length} markers`
+              : entry.kind === "sketch"
+                ? `${model.shapes.length} shapes, ${model.polars.length} polar curves, ${model.datums.length} datums`
+                : entry.kind === "sketch3d"
+                  ? `${model.features.length} features, ${model.datumPlanes.length} datum planes, ${model.datumAxes.length} axes`
+                  : `${model.components.length} components, ${model.connections.length} wires, ${model.labels.length} labels, ${model.groups.length} groups`;
       const kindLabel = entry.kind === "line" ? "electrical line"
         : entry.kind === "wiring" ? "panel wiring"
           : entry.kind === "waveform" ? "educational waveform"
-            : entry.kind === "sketch" ? "parametric sketch"
-              : entry.kind === "sketch3d" ? "3D parametric sketch"
-                : "electronic schematic";
+            : entry.kind === "chart" ? "educational chart"
+              : entry.kind === "sketch" ? "parametric sketch"
+                : entry.kind === "sketch3d" ? "3D parametric sketch"
+                  : "electronic schematic";
       return `<article class="diagram-card">
         <div class="diagram-header">
           <span>${kindLabel} block ${index + 1}</span>
@@ -5458,7 +6189,9 @@ marker SAMPLE at=7 label="sample"
           ? `panel-wiring-${button.dataset.downloadSvg}.svg`
           : button.dataset.diagramKind === "waveform"
             ? `waveform-sheet-${button.dataset.downloadSvg}.svg`
-            : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
+            : button.dataset.diagramKind === "chart"
+              ? `chart-${button.dataset.downloadSvg}.svg`
+              : `schematic-sheet-${button.dataset.downloadSvg}.svg`;
       downloadBlob(
         serializeSvg(svg),
         filename,
@@ -5477,12 +6210,14 @@ marker SAMPLE at=7 label="sample"
     parseLineDiagram,
     parseWiringDiagram,
     parseWaveformDiagram,
+    parseChartDiagram,
     validateCircuit,
     validateGlobalLabels,
     renderCircuitSvg,
     renderLineDiagramSvg,
     renderWiringDiagramSvg,
     renderWaveformDiagramSvg,
+    renderChartDiagramSvg,
     parseSketchDiagram,
     renderSketchDiagramSvg,
     parseSketch3dDiagram,
